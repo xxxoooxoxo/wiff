@@ -46,7 +46,7 @@ class FakeBackend {
 }
 
 async function withManager(runTest, managerOptions = {}) {
-  const stateRoot = await mkdtemp(path.join(os.tmpdir(), "codex-workflows-test-"));
+  const stateRoot = await mkdtemp(path.join(os.tmpdir(), "wiff-test-"));
   const backend = new FakeBackend();
   const manager = new WorkflowManager({ stateRoot, backend, maxConcurrency: 4, ...managerOptions });
   try {
@@ -59,7 +59,7 @@ async function withManager(runTest, managerOptions = {}) {
 }
 
 async function makeGitRepo() {
-  const repo = await mkdtemp(path.join(os.tmpdir(), "codex-workflows-repo-"));
+  const repo = await mkdtemp(path.join(os.tmpdir(), "wiff-repo-"));
   const git = (...args) => execFileAsync("git", ["-C", repo, ...args]);
   await git("init", "--quiet");
   await git("config", "user.email", "test@example.com");
@@ -198,7 +198,7 @@ test("cancel aborts a live agent and marks the run cancelled", async () => {
 });
 
 test("a second manager observes a live owner without interrupting it", async () => {
-  const stateRoot = await mkdtemp(path.join(os.tmpdir(), "codex-workflows-host-test-"));
+  const stateRoot = await mkdtemp(path.join(os.tmpdir(), "wiff-host-test-"));
   const owner = new WorkflowManager({ stateRoot, backend: new FakeBackend(), maxConcurrency: 2 });
   const observer = new WorkflowManager({ stateRoot, backend: new FakeBackend(), maxConcurrency: 2 });
   try {
@@ -225,7 +225,7 @@ test("a second manager observes a live owner without interrupting it", async () 
 });
 
 test("a second manager can cancel a workflow owned by another host", async () => {
-  const stateRoot = await mkdtemp(path.join(os.tmpdir(), "codex-workflows-cancel-test-"));
+  const stateRoot = await mkdtemp(path.join(os.tmpdir(), "wiff-cancel-test-"));
   const owner = new WorkflowManager({ stateRoot, backend: new FakeBackend(), maxConcurrency: 2 });
   const controller = new WorkflowManager({ stateRoot, backend: new FakeBackend(), maxConcurrency: 2 });
   try {
@@ -331,7 +331,7 @@ test("worktree isolation gives each agent its own checkout and keeps only dirty 
 });
 
 test("worktree isolation fails clearly outside a git repository", async () => {
-  const plainDir = await mkdtemp(path.join(os.tmpdir(), "codex-workflows-plain-"));
+  const plainDir = await mkdtemp(path.join(os.tmpdir(), "wiff-plain-"));
   try {
     await withManager(async ({ manager }) => {
       const script = `
@@ -349,7 +349,7 @@ test("worktree isolation fails clearly outside a git repository", async () => {
 });
 
 test("agentType resolves persona instructions and frontmatter defaults", async () => {
-  const agentsDir = await mkdtemp(path.join(os.tmpdir(), "codex-workflows-agents-"));
+  const agentsDir = await mkdtemp(path.join(os.tmpdir(), "wiff-agents-"));
   try {
     await writeFile(
       path.join(agentsDir, "reviewer.md"),
@@ -387,7 +387,7 @@ test("agentType resolves persona instructions and frontmatter defaults", async (
 });
 
 test("unknown agentType fails the workflow with the searched paths", async () => {
-  const agentsDir = await mkdtemp(path.join(os.tmpdir(), "codex-workflows-agents-"));
+  const agentsDir = await mkdtemp(path.join(os.tmpdir(), "wiff-agents-"));
   try {
     await withManager(
       async ({ manager }) => {
@@ -408,7 +408,7 @@ test("unknown agentType fails the workflow with the searched paths", async () =>
 });
 
 test("editing a persona invalidates the resume cache", async () => {
-  const agentsDir = await mkdtemp(path.join(os.tmpdir(), "codex-workflows-agents-"));
+  const agentsDir = await mkdtemp(path.join(os.tmpdir(), "wiff-agents-"));
   try {
     await writeFile(path.join(agentsDir, "helper.md"), "Original persona.\n");
     await withManager(

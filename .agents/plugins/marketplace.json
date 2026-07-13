@@ -1,14 +1,14 @@
 {
-  "name": "codex-workflows-local",
+  "name": "wiff",
   "interface": {
-    "displayName": "Codex Workflows (Local)"
+    "displayName": "wiff (Local)"
   },
   "plugins": [
     {
-      "name": "codex-workflows",
+      "name": "wiff",
       "source": {
         "source": "local",
-        "path": "./plugins/codex-workflows"
+        "path": "./plugins/wiff"
       },
       "policy": {
         "installation": "AVAILABLE",

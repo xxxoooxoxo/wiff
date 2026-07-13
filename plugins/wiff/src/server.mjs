@@ -3,8 +3,8 @@ import readline from "node:readline";
 import { WorkflowManager } from "./runtime.mjs";
 import { serializeError } from "./util.mjs";
 
-const SERVER_NAME = "Codex Workflows";
-const SERVER_VERSION = "0.2.0";
+const SERVER_NAME = "wiff";
+const SERVER_VERSION = "0.3.0";
 const CHILD_MODE = process.env.CODEX_WORKFLOW_CHILD === "1";
 
 const tools = [

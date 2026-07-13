@@ -1,4 +1,4 @@
 interface:
-  display_name: "Codex Workflows"
+  display_name: "wiff"
   short_description: "Run deterministic multi-agent Codex workflows"
   default_prompt: "Use $workflow to orchestrate this task as a resumable Codex workflow."

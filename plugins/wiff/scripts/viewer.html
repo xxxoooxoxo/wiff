@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>wiff</title>
+<style>
+  :root {
+    --surface: #fcfcfb; --surface-2: #f3f3f1; --surface-3: #e9e9e6;
+    --ink: #1f1f1e; --ink-2: #55554f; --ink-3: #8a8a82;
+    --line: #e2e2de;
+    --running: #2f6bd8; --good: #0ca30c; --bad: #d94f2a; --warn: #b97a00; --cached: #8a8a82;
+    --running-bg: #e8effb; --good-bg: #e7f5e7; --bad-bg: #fbeae4; --warn-bg: #faf0d8; --cached-bg: #ececea;
+  }
+  [data-theme="dark"] {
+    --surface: #1a1a19; --surface-2: #232322; --surface-3: #2d2d2b;
+    --ink: #f0f0ee; --ink-2: #b5b5ad; --ink-3: #7d7d75;
+    --line: #33332f;
+    --running: #6f9ff0; --good: #4fc24f; --bad: #ec835a; --warn: #fab219; --cached: #7d7d75;
+    --running-bg: #20304d; --good-bg: #1d331d; --bad-bg: #402419; --warn-bg: #3d3113; --cached-bg: #2b2b29;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--surface); color: var(--ink);
+    display: grid; grid-template-rows: auto auto 1fr; overflow: hidden;
+  }
+  code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+
+  header {
+    display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+    border-bottom: 1px solid var(--line); background: var(--surface-2);
+  }
+  header h1 { font-size: 14px; font-weight: 650; }
+  header .root { color: var(--ink-3); font-size: 11px; }
+  header .spacer { flex: 1; }
+  button {
+    font: inherit; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line);
+    border-radius: 6px; padding: 4px 10px; cursor: pointer;
+  }
+  button:hover { background: var(--surface-3); }
+
+  /* Global active-agents strip */
+  #active-strip { border-bottom: 1px solid var(--line); background: var(--surface); max-height: 30vh; overflow-y: auto; }
+  #active-strip:empty { display: none; }
+  .active-row {
+    display: grid; grid-template-columns: auto minmax(140px, 200px) minmax(120px, 180px) 1fr auto;
+    gap: 12px; align-items: center; width: 100%; text-align: left;
+    padding: 6px 16px; border: none; border-bottom: 1px solid var(--line); border-radius: 0;
+    background: none;
+  }
+  .active-row:last-child { border-bottom: none; }
+  .active-row:hover { background: var(--surface-2); }
+  .active-row .agent { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .active-row .run { color: var(--ink-3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .active-row .now {
+    color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px;
+  }
+  .active-row .dur { color: var(--ink-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+  .layout { display: grid; grid-template-columns: 300px 1fr; min-height: 0; }
+  aside { border-right: 1px solid var(--line); overflow-y: auto; padding: 8px; }
+  main { overflow-y: auto; padding: 16px 20px 60px; }
+
+  .run-item {
+    display: block; width: 100%; text-align: left; border: 1px solid transparent;
+    background: none; padding: 8px 10px; border-radius: 8px; margin-bottom: 2px;
+  }
+  .run-item:hover { background: var(--surface-2); }
+  .run-item.selected { background: var(--surface-2); border-color: var(--line); }
+  .run-item .name { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .run-item .sub { color: var(--ink-3); font-size: 11px; margin-top: 1px; }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.running { background: var(--running); animation: pulse 1.4s ease-in-out infinite; }
+  .dot.completed { background: var(--good); }
+  .dot.failed { background: var(--bad); }
+  .dot.cancelled, .dot.interrupted { background: var(--warn); }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px;
+    border-radius: 999px; font-size: 11px; font-weight: 600;
+  }
+  .pill.running { color: var(--running); background: var(--running-bg); }
+  .pill.completed { color: var(--good); background: var(--good-bg); }
+  .pill.failed { color: var(--bad); background: var(--bad-bg); }
+  .pill.cancelled, .pill.interrupted { color: var(--warn); background: var(--warn-bg); }
+  .pill.cached { color: var(--cached); background: var(--cached-bg); }
+
+  .run-head h2 { font-size: 17px; font-weight: 650; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .run-head .desc { color: var(--ink-2); margin-top: 3px; max-width: 70ch; }
+  .run-head .meta { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink-3); font-size: 11px; margin-top: 8px; }
+  .run-head .meta b { color: var(--ink-2); font-weight: 600; }
+
+  .counters { display: flex; gap: 8px; margin: 14px 0 4px; flex-wrap: wrap; }
+  .counter {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 12px; min-width: 84px;
+  }
+  .counter .n { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .counter .l { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); }
+
+  section { margin-top: 22px; }
+  section > h3 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--ink-3); margin-bottom: 8px; font-weight: 650;
+  }
+
+  /* Timeline */
+  .timeline { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--surface-2); }
+  .tl-row { display: grid; grid-template-columns: 200px 1fr 90px; align-items: center; gap: 10px; padding: 3px 0; }
+  .tl-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-size: 12px; }
+  .tl-track { position: relative; height: 14px; background: var(--surface-3); border-radius: 4px; }
+  .tl-bar { position: absolute; top: 2px; bottom: 2px; border-radius: 4px; min-width: 6px; }
+  .tl-bar.running { background: var(--running); animation: pulse 1.4s ease-in-out infinite; }
+  .tl-bar.completed { background: var(--good); }
+  .tl-bar.failed { background: var(--bad); }
+  .tl-bar.cached { background: var(--cached); }
+  .tl-dur { color: var(--ink-3); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+  .tl-axis { display: flex; justify-content: space-between; color: var(--ink-3); font-size: 10px; margin-top: 6px; }
+  .legend { display: flex; gap: 12px; margin-top: 10px; color: var(--ink-2); font-size: 11px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; }
+
+  /* Agent cards */
+  .phase-title { font-weight: 650; margin: 14px 0 6px; display: flex; gap: 8px; align-items: baseline; }
+  .phase-title small { color: var(--ink-3); font-weight: 400; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 8px; }
+  .card {
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+    background: var(--surface); cursor: pointer; text-align: left; width: 100%;
+  }
+  .card:hover { background: var(--surface-2); }
+  .card .top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .card .label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .badges { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+  .badge {
+    font-size: 10px; color: var(--ink-2); background: var(--surface-3);
+    border-radius: 5px; padding: 1px 7px;
+  }
+  .badge.wt { color: var(--warn); background: var(--warn-bg); }
+  .card .now {
+    margin-top: 7px; color: var(--ink-2); font-size: 11px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .card .now:empty { display: none; }
+  .card .err { color: var(--bad); font-size: 11px; margin-top: 6px; word-break: break-word; }
+
+  .feed { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .feed div { padding: 5px 12px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; }
+  .feed div:last-child { border-bottom: none; }
+  .feed .t { color: var(--ink-3); font-variant-numeric: tabular-nums; flex: none; }
+  .feed .phase-ev { color: var(--running); font-weight: 600; }
+
+  pre.result {
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px; overflow-x: auto; max-height: 320px; overflow-y: auto;
+  }
+  .error-banner {
+    border: 1px solid var(--bad); background: var(--bad-bg); color: var(--bad);
+    border-radius: 10px; padding: 10px 14px; margin-top: 14px; word-break: break-word;
+  }
+  .empty { color: var(--ink-3); padding: 40px; text-align: center; }
+
+  /* Transcript drawer */
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(640px, 85vw);
+    background: var(--surface); border-left: 1px solid var(--line);
+    box-shadow: -12px 0 30px rgba(0,0,0,.15); display: none; flex-direction: column; z-index: 10;
+  }
+  .drawer.open { display: flex; }
+  .drawer header { justify-content: space-between; }
+  .drawer .body { overflow-y: auto; padding: 12px 16px; flex: 1; }
+  .tr-event { margin-bottom: 10px; }
+  .tr-event .m { color: var(--ink-3); font-size: 10px; }
+  .tr-event pre { white-space: pre-wrap; word-break: break-word; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; margin-top: 2px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>wiff</h1>
+  <span class="root mono" id="root"></span>
+  <span class="spacer"></span>
+  <span class="root" id="tick"></span>
+  <button id="theme">◐ theme</button>
+</header>
+<div id="active-strip"></div>
+<div class="layout">
+  <aside id="runs"></aside>
+  <main id="main"><div class="empty">Loading runs…</div></main>
+</div>
+<div class="drawer" id="drawer">
+  <header>
+    <h1 id="drawer-title" class="mono"></h1>
+    <span class="root" id="drawer-live"></span>
+    <button id="drawer-close">✕ close</button>
+  </header>
+  <div class="body" id="drawer-body"></div>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+let selectedRunId = null;
+let runsCache = [];
+let detail = null;          // { run, journal, activity }
+let structureKey = "";      // full re-render only when this changes
+let agentsIndex = new Map(); // key -> derived agent row
+let drawer = null;          // { runId, file, label, live }
+
+const savedTheme = localStorage.getItem("cwf-theme");
+if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+else if (matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.dataset.theme = "dark";
+$("theme").onclick = () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem("cwf-theme", next);
+};
+
+const esc = (value) => String(value ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmtDur = (ms) => {
+  if (ms == null || Number.isNaN(ms)) return "";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+};
+const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString() : "");
+const STATUS_ICON = { running: "▶", completed: "✓", failed: "✕", cached: "↺", cancelled: "⊘", interrupted: "⏸" };
+const KIND_ICON = { exec: "❯", edit: "✎", thinking: "…", message: "💬", search: "🔎", tool: "⚙" };
+const pill = (status) => `<span class="pill ${esc(status)}">${STATUS_ICON[status] ?? ""} ${esc(status)}</span>`;
+const nowLine = (activity) => (activity ? `${KIND_ICON[activity.kind] ?? "·"} ${activity.text}` : "");
+
+async function fetchJson(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error ?? response.statusText);
+  return response.json();
+}
+
+// ---- data shaping -----------------------------------------------------------
+
+function deriveAgents(journal) {
+  const byKey = new Map();
+  for (const event of journal) {
+    if (event.type === "agent.started") {
+      byKey.set(event.key, {
+        key: event.key, label: event.label ?? event.key, phase: event.phase ?? "default",
+        status: "running", startedAt: event.at, options: event.options ?? {},
+        transcript: event.transcriptPath?.split("/").pop(), worktreePath: event.worktreePath,
+      });
+    } else if (event.type === "agent.completed" || event.type === "agent.failed") {
+      const row = byKey.get(event.key) ?? { key: event.key, label: event.key, phase: "default", options: {} };
+      row.status = event.type === "agent.completed" ? "completed" : "failed";
+      row.endedAt = event.at;
+      row.usage = event.usage;
+      row.error = event.error?.message;
+      row.worktreePath = event.worktreePath ?? row.worktreePath;
+      row.worktreeKept = event.worktreeKept;
+      row.transcript = row.transcript ?? event.transcriptPath?.split("/").pop();
+      byKey.set(event.key, row);
+    } else if (event.type === "agent.cached") {
+      byKey.set(event.key, {
+        key: event.key, label: event.key, phase: "cached", status: "cached",
+        startedAt: event.at, endedAt: event.at, options: {},
+        worktreePath: event.worktreePath, worktreeKept: event.worktreeKept,
+      });
+    }
+  }
+  return [...byKey.values()];
+}
+
+// ---- runs sidebar -----------------------------------------------------------
+
+function renderRunsList() {
+  $("runs").innerHTML = runsCache.map((run) => `
+    <button class="run-item ${run.runId === selectedRunId ? "selected" : ""}" data-run="${esc(run.runId)}">
+      <span class="name"><span class="dot ${esc(run.status)}"></span>${esc(run.name ?? run.runId)}</span>
+      <div class="sub">${pill(run.status)} · ${fmtTime(run.startedAt)}</div>
+      <div class="sub mono">${esc(run.runId.slice(0, 14))}… · ${run.stats ? `${run.stats.completed}✓ ${run.stats.failed}✕ ${run.stats.cached}↺` : ""}</div>
+    </button>`).join("") || `<div class="empty">No runs yet.</div>`;
+}
+
+// ---- global active-agents strip (updated in place, keyed rows) ---------------
+
+function syncActiveStrip(agents) {
+  const strip = $("active-strip");
+  const seen = new Set();
+  for (const agent of agents) {
+    const key = `${agent.runId}::${agent.key}`;
+    seen.add(key);
+    let row = strip.querySelector(`[data-key="${CSS.escape(key)}"]`);
+    if (!row) {
+      row = document.createElement("button");
+      row.className = "active-row";
+      row.dataset.key = key;
+      row.dataset.run = agent.runId;
+      row.innerHTML = `<span class="dot running"></span>
+        <span class="agent" title="${esc(agent.key)}">${esc(agent.label)}</span>
+        <span class="run">${esc(agent.runName)}${agent.phase && agent.phase !== "default" ? ` · ${esc(agent.phase)}` : ""}</span>
+        <span class="now"></span>
+        <span class="dur" data-since="${esc(agent.startedAt)}"></span>`;
+      strip.appendChild(row);
+    }
+    row.querySelector(".now").textContent = nowLine(agent.activity);
+    row.querySelector(".now").title = agent.activity?.text ?? "";
+  }
+  for (const row of [...strip.children]) {
+    if (!seen.has(row.dataset.key)) row.remove();
+  }
+}
+
+// ---- run detail: skeleton render + in-place dynamic updates -------------------
+
+function computeStructureKey(run, agents) {
+  return [run.runId, run.status, run.attempt, agents.map((agent) => `${agent.key}:${agent.status}`).join("|")].join("§");
+}
+
+function timelineRow(agent) {
+  return `<div class="tl-row" data-tl="${esc(agent.key)}">
+    <span class="tl-label" title="${esc(agent.key)}">${esc(agent.label)}</span>
+    <span class="tl-track"><span class="tl-bar ${esc(agent.status)}"></span></span>
+    <span class="tl-dur"></span>
+  </div>`;
+}
+
+function agentCard(agent) {
+  const tokens = agent.usage?.total?.totalTokens;
+  return `<button class="card" data-card="${esc(agent.key)}" data-transcript="${esc(agent.transcript ?? "")}" data-label="${esc(agent.label)}">
+    <div class="top"><span class="label" title="${esc(agent.key)}">${esc(agent.label)}</span>${pill(agent.status)}</div>
+    <div class="badges">
+      ${agent.options.model ? `<span class="badge">${esc(agent.options.model)}</span>` : ""}
+      ${agent.options.effort ? `<span class="badge">${esc(agent.options.effort)}</span>` : ""}
+      ${agent.options.sandbox ? `<span class="badge">${esc(agent.options.sandbox)}</span>` : ""}
+      ${agent.options.agentType ? `<span class="badge">@${esc(agent.options.agentType)}</span>` : ""}
+      ${agent.worktreePath ? `<span class="badge wt">⎇ worktree${agent.worktreeKept ? " (kept)" : ""}</span>` : ""}
+      <span class="badge" data-dur></span>
+      ${tokens ? `<span class="badge">${tokens.toLocaleString()} tok</span>` : ""}
+    </div>
+    <div class="now" data-now></div>
+    ${agent.error ? `<div class="err">${esc(agent.error)}</div>` : ""}
+  </button>`;
+}
+
+function renderSkeleton(run, agents, journal) {
+  const phases = [...new Set(agents.map((agent) => agent.phase))];
+  const cards = phases.map((phase) => {
+    const members = agents.filter((agent) => agent.phase === phase);
+    return `<div class="phase-title">${esc(phase)} <small>${members.length} agent${members.length === 1 ? "" : "s"}</small></div>
+      <div class="cards">${members.map(agentCard).join("")}</div>`;
+  }).join("");
+  const timed = agents.filter((agent) => agent.startedAt);
+  const logs = journal.filter((event) => event.type === "log" || event.type === "phase").slice(-80);
+
+  $("main").innerHTML = `
+    <div class="run-head">
+      <h2>${esc(run.name ?? run.runId)} ${pill(run.status)}</h2>
+      ${run.description ? `<div class="desc">${esc(run.description)}</div>` : ""}
+      <div class="meta">
+        <span><b>run</b> <span class="mono">${esc(run.runId)}</span></span>
+        <span><b>elapsed</b> <span id="elapsed"></span></span>
+        <span><b>attempt</b> ${run.attempt ?? 1}</span>
+        <span id="phase-slot">${run.phase ? `<b>phase</b> ${esc(run.phase)}` : ""}</span>
+        <span><b>cwd</b> <span class="mono">${esc(run.cwd ?? "")}</span></span>
+      </div>
+    </div>
+    <div class="counters">${["requested", "running", "completed", "failed", "cached"].map((name) =>
+      `<div class="counter"><div class="n" data-counter="${name}">0</div><div class="l">${name}</div></div>`).join("")}
+    </div>
+    ${run.error ? `<div class="error-banner">${STATUS_ICON.failed} ${esc(run.error.message)}</div>` : ""}
+    ${timed.length ? `<section><h3>Timeline</h3><div class="timeline">${timed.map(timelineRow).join("")}
+      <div class="tl-axis"><span id="tl-start"></span><span id="tl-span"></span><span id="tl-end"></span></div>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--running)"></span>running</span>
+        <span><span class="swatch" style="background:var(--good)"></span>completed</span>
+        <span><span class="swatch" style="background:var(--bad)"></span>failed</span>
+        <span><span class="swatch" style="background:var(--cached)"></span>cached</span>
+      </div></div></section>` : ""}
+    <section><h3>Agents</h3>${cards || `<div class="empty">No agents yet.</div>`}</section>
+    ${run.worktrees?.length ? `<section><h3>Kept worktrees</h3><div class="feed">${run.worktrees.map((entry) =>
+      `<div><span class="mono">${esc(entry.key)}</span><span class="mono" style="color:var(--ink-3)">${esc(entry.path)}</span></div>`).join("")}</div></section>` : ""}
+    <section id="activity-section" ${logs.length ? "" : "hidden"}><h3>Activity</h3><div class="feed" id="activity-feed"></div></section>
+    ${run.result !== undefined && run.result !== null ? `<section><h3>Result</h3><pre class="result mono">${esc(JSON.stringify(run.result, null, 2))}</pre></section>` : ""}`;
+}
+
+function updateDynamic() {
+  if (!detail) return;
+  const { run, journal, activity } = detail;
+  const agents = [...agentsIndex.values()];
+  const now = Date.now();
+
+  const elapsedEl = $("elapsed");
+  if (elapsedEl) {
+    elapsedEl.textContent = fmtDur(
+      (run.completedAt ? +new Date(run.completedAt) : now) - +new Date(run.startedAt),
+    );
+  }
+  const phaseSlot = $("phase-slot");
+  if (phaseSlot && run.phase) phaseSlot.innerHTML = `<b>phase</b> ${esc(run.phase)}`;
+  for (const name of ["requested", "running", "completed", "failed", "cached"]) {
+    const el = document.querySelector(`[data-counter="${name}"]`);
+    if (el) el.textContent = run.stats?.[name] ?? 0;
+  }
+
+  // Timeline geometry.
+  const timed = agents.filter((agent) => agent.startedAt);
+  if (timed.length) {
+    const start = Math.min(...timed.map((agent) => +new Date(agent.startedAt)));
+    const end = Math.max(
+      run.status === "running" ? now : 0,
+      ...timed.map((agent) => +new Date(agent.endedAt ?? now)),
+    );
+    const span = Math.max(end - start, 1);
+    for (const agent of timed) {
+      const row = document.querySelector(`[data-tl="${CSS.escape(agent.key)}"]`);
+      if (!row) continue;
+      const from = +new Date(agent.startedAt);
+      const to = agent.endedAt ? +new Date(agent.endedAt) : now;
+      const bar = row.querySelector(".tl-bar");
+      bar.style.left = `${((from - start) / span) * 100}%`;
+      bar.style.width = `${Math.max(((to - from) / span) * 100, 0.8)}%`;
+      bar.title = `${agent.label} — ${agent.status} · ${fmtDur(to - from)}`;
+      row.querySelector(".tl-dur").textContent = fmtDur(to - from);
+    }
+    const startEl = $("tl-start");
+    if (startEl) {
+      startEl.textContent = fmtTime(new Date(start).toISOString());
+      $("tl-span").textContent = fmtDur(span);
+      $("tl-end").textContent = fmtTime(new Date(end).toISOString());
+    }
+  }
+
+  // Card durations + live "now doing" lines.
+  for (const agent of agents) {
+    const card = document.querySelector(`[data-card="${CSS.escape(agent.key)}"]`);
+    if (!card) continue;
+    const to = agent.endedAt ? +new Date(agent.endedAt) : now;
+    const durEl = card.querySelector("[data-dur]");
+    if (durEl && agent.startedAt) durEl.textContent = fmtDur(to - +new Date(agent.startedAt));
+    const nowEl = card.querySelector("[data-now]");
+    if (nowEl) {
+      const line = agent.status === "running" ? nowLine(activity?.[agent.key]) : "";
+      nowEl.textContent = line;
+      nowEl.title = line;
+    }
+  }
+
+  // Activity feed (no buttons inside — safe to rebuild when it grows).
+  const logs = journal.filter((event) => event.type === "log" || event.type === "phase").slice(-80);
+  const feed = $("activity-feed");
+  if (feed && String(logs.length) !== feed.dataset.count) {
+    feed.dataset.count = String(logs.length);
+    $("activity-section").hidden = logs.length === 0;
+    feed.innerHTML = logs.map((event) =>
+      `<div><span class="t mono">${fmtTime(event.at)}</span>${event.type === "phase"
+        ? `<span class="phase-ev">phase → ${esc(event.name)}</span>`
+        : `<span class="mono">${esc(typeof event.value === "string" ? event.value : JSON.stringify(event.value))}</span>`}</div>`).join("");
+  }
+}
+
+function applyDetail(payload) {
+  detail = payload;
+  const agents = deriveAgents(payload.journal);
+  agentsIndex = new Map(agents.map((agent) => [agent.key, agent]));
+  const key = computeStructureKey(payload.run, agents);
+  if (key !== structureKey) {
+    structureKey = key;
+    renderSkeleton(payload.run, agents, payload.journal);
+  }
+  updateDynamic();
+}
+
+// ---- polling ------------------------------------------------------------------
+
+async function refreshRuns() {
+  try {
+    const payload = await fetchJson("/api/runs");
+    runsCache = payload.runs;
+    $("root").textContent = payload.root;
+    if (!selectedRunId && runsCache.length) {
+      selectedRunId = (runsCache.find((run) => run.status === "running") ?? runsCache[0]).runId;
+      await refreshDetail();
+    }
+    renderRunsList();
+  } catch (error) {
+    $("runs").innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+  }
+}
+
+async function refreshDetail() {
+  if (!selectedRunId) return;
+  try {
+    applyDetail(await fetchJson(`/api/runs/${selectedRunId}`));
+  } catch (error) {
+    structureKey = "";
+    $("main").innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+  }
+}
+
+async function refreshActive() {
+  try {
+    const payload = await fetchJson("/api/active");
+    syncActiveStrip(payload.agents);
+    $("tick").textContent = payload.agents.length
+      ? `● ${payload.agents.length} agent${payload.agents.length === 1 ? "" : "s"} live`
+      : "";
+  } catch {
+    // Transient — leave the strip as-is.
+  }
+}
+
+// ---- interaction (delegated, survives re-renders) --------------------------------
+
+document.addEventListener("click", (event) => {
+  const runButton = event.target.closest("[data-run]");
+  if (runButton) {
+    selectedRunId = runButton.dataset.run;
+    structureKey = "";
+    renderRunsList();
+    refreshDetail();
+    return;
+  }
+  const card = event.target.closest("[data-card]");
+  if (card && card.dataset.transcript) {
+    openDrawer(selectedRunId, card.dataset.transcript, card.dataset.label,
+      agentsIndex.get(card.dataset.card)?.status === "running");
+  }
+});
+
+async function renderDrawerBody() {
+  if (!drawer) return;
+  try {
+    const payload = await fetchJson(`/api/runs/${drawer.runId}/transcripts/${drawer.file}`);
+    const body = $("drawer-body");
+    const pinned = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
+    body.innerHTML = payload.events.map(({ at, event }) => {
+      const item = event?.params?.item;
+      let text = "";
+      if (item?.text) text = item.text;
+      else if (item?.command) text = `$ ${item.command}`;
+      else if (event?.params?.delta) return "";
+      else text = JSON.stringify(event?.params ?? event, null, 2);
+      if (text.length > 4000) text = `${text.slice(0, 4000)}\n… (truncated)`;
+      return `<div class="tr-event"><div class="m mono">${fmtTime(at)} · ${esc(event?.method ?? "")}${item?.type ? ` · ${esc(item.type)}` : ""}</div><pre class="mono">${esc(text)}</pre></div>`;
+    }).join("") || `<div class="empty">No transcript events.</div>`;
+    if (pinned || drawer.firstLoad) body.scrollTop = body.scrollHeight;
+    drawer.firstLoad = false;
+  } catch (error) {
+    $("drawer-body").innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+  }
+}
+
+function openDrawer(runId, file, label, live) {
+  drawer = { runId, file, label, live, firstLoad: true };
+  $("drawer-title").textContent = label;
+  $("drawer-live").textContent = live ? "● live tail" : "";
+  $("drawer-body").innerHTML = `<div class="empty">Loading…</div>`;
+  $("drawer").classList.add("open");
+  renderDrawerBody();
+}
+function closeDrawer() {
+  drawer = null;
+  $("drawer").classList.remove("open");
+}
+$("drawer-close").onclick = closeDrawer;
+document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeDrawer(); });
+
+// ---- timers ----------------------------------------------------------------------
+
+refreshRuns();
+refreshActive();
+setInterval(refreshRuns, 3000);
+setInterval(refreshActive, 2000);
+setInterval(() => {
+  if (selectedRunId && (detail?.run?.status === "running" || !detail)) refreshDetail();
+}, 1500);
+setInterval(updateDynamic, 1000);
+setInterval(() => {
+  if (drawer?.live) {
+    if (agentsIndex.get(drawer.file?.split("-").slice(0, -1).join("-"))?.status !== "running") {
+      $("drawer-live").textContent = "";
+      drawer.live = false;
+    }
+    renderDrawerBody();
+  }
+}, 2000);
+</script>
+</body>
+</html>

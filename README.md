@@ -1,8 +1,8 @@
-# Codex Workflows
+# wiff
 
-**Deterministic, resumable multi-agent workflows for [Codex](https://github.com/openai/codex) — written as plain JavaScript.**
+**Deterministic, resumable multi-agent workflows for [Codex](https://github.com/openai/codex) — written as plain JavaScript. Like `wf`, but wiff.**
 
-![MIT License](https://img.shields.io/badge/license-MIT-blue) ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen) ![Version](https://img.shields.io/badge/version-0.2.0-informational)
+![MIT License](https://img.shields.io/badge/license-MIT-blue) ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen) ![Version](https://img.shields.io/badge/version-0.3.0-informational)
 
 Fan a task out to a fleet of Codex agents with a small script instead of a prayer. You write ordinary JavaScript with `agent()`, `parallel()`, and `pipeline()`; the runtime executes it in the background, journals every step, and — when a run dies halfway through — resumes it without re-paying for a single completed agent.
 
@@ -50,16 +50,16 @@ Ad-hoc multi-agent orchestration ("spawn some subagents for this") is great unti
 ## Install
 
 ```sh
-codex plugin marketplace add https://github.com/xxxoooxoxo/codex-workflows.git
-codex plugin add codex-workflows@codex-workflows-local
+codex plugin marketplace add https://github.com/xxxoooxoxo/wiff.git
+codex plugin add wiff@wiff
 ```
 
 Or from a local checkout:
 
 ```sh
-git clone https://github.com/xxxoooxoxo/codex-workflows.git
-codex plugin marketplace add ./codex-workflows
-codex plugin add codex-workflows@codex-workflows-local
+git clone https://github.com/xxxoooxoxo/wiff.git
+codex plugin marketplace add ./wiff
+codex plugin add wiff@wiff
 ```
 
 Then start a new Codex session and either invoke the bundled skill with `$workflow` or just ask: *"run this as a resumable workflow."*
@@ -82,11 +82,11 @@ worktrees/       isolated checkouts for agents that asked for them
 
 Status, waits, cancellation, and resume all work across host restarts — a second Codex session can observe, cancel, or resume a run it didn't start.
 
-See [the API reference](plugins/codex-workflows/skills/workflow/references/api.md) for the full script contract and [`examples/verify-and-fix.js`](plugins/codex-workflows/examples/verify-and-fix.js) for a staged example.
+See [the API reference](plugins/wiff/skills/workflow/references/api.md) for the full script contract and [`examples/verify-and-fix.js`](plugins/wiff/examples/verify-and-fix.js) for a staged example.
 
 ## Roadmap
 
-- [Model-agnostic backends](https://github.com/xxxoooxoxo/codex-workflows/issues/1) — run individual agents on Claude or Gemini alongside Codex, routed by model name.
+- [Model-agnostic backends](https://github.com/xxxoooxoxo/wiff/issues/1) — run individual agents on Claude or Gemini alongside Codex, routed by model name.
 
 ## Related projects
 
@@ -97,7 +97,7 @@ See [the API reference](plugins/codex-workflows/skills/workflow/references/api.m
 ## Development
 
 ```sh
-cd plugins/codex-workflows
+cd plugins/wiff
 npm test        # unit tests (fake backend, no tokens spent)
 npm run check   # syntax check
 npm run smoke   # one real Codex child, end to end
@@ -109,7 +109,7 @@ Pass a completed smoke run id to verify cross-process resume without another mod
 npm run smoke -- wf_<run-id>
 ```
 
-Codex runs installed plugins from a versioned cache — after editing source, bump the version in `.codex-plugin/plugin.json` and re-run `codex plugin add codex-workflows@codex-workflows-local` to pick up changes.
+Codex runs installed plugins from a versioned cache — after editing source, bump the version in `.codex-plugin/plugin.json` and re-run `codex plugin add wiff@wiff` to pick up changes.
 
 ## License
 

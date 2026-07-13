@@ -9,7 +9,7 @@ import test from "node:test";
 const SERVER_PATH = new URL("../src/server.mjs", import.meta.url);
 
 async function listTools(childMode) {
-  const stateRoot = await mkdtemp(path.join(os.tmpdir(), "codex-workflows-server-"));
+  const stateRoot = await mkdtemp(path.join(os.tmpdir(), "wiff-server-"));
   const child = spawn(process.execPath, [SERVER_PATH.pathname], {
     stdio: ["pipe", "pipe", "pipe"],
     env: {

@@ -71,8 +71,8 @@ export class AppServerClient {
 
     await this.#request("initialize", {
       clientInfo: {
-        name: "codex_workflows",
-        title: "Codex Workflows",
+        name: "wiff",
+        title: "wiff",
         version: "0.1.5",
       },
       capabilities: { experimentalApi: true },
@@ -180,7 +180,7 @@ export class AppServerClient {
       cwd: options.cwd,
       approvalPolicy: "never",
       sandbox: options.sandbox,
-      serviceName: "codex_workflows",
+      serviceName: "wiff",
       ephemeral: false,
       config: {
         features: { multi_agent: false },

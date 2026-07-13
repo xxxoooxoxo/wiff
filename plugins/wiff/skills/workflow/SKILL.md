@@ -3,7 +3,7 @@ name: workflow
 description: Create, run, monitor, cancel, or resume deterministic JavaScript workflows that orchestrate multiple Codex agents. Use for parallel investigation or review, staged agent pipelines, resumable long-running work, or when the user explicitly asks for a workflow, orchestration, fan-out, or several independent agents.
 ---
 
-# Codex Workflows
+# wiff
 
 Use workflow code when the plan itself benefits from deterministic branching, parallelism, or resumability. Keep simple one-agent tasks in the current task.
 
