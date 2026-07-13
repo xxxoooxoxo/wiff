@@ -1,0 +1,20 @@
+{
+  "name": "codex-workflows-local",
+  "interface": {
+    "displayName": "Codex Workflows (Local)"
+  },
+  "plugins": [
+    {
+      "name": "codex-workflows",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex-workflows"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Engineering"
+    }
+  ]
+}

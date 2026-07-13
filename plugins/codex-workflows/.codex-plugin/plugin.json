@@ -1,0 +1,34 @@
+{
+  "name": "codex-workflows",
+  "version": "0.2.0",
+  "description": "Run deterministic, resumable JavaScript workflows that orchestrate Codex agents.",
+  "author": {
+    "name": "Ali Hsareini"
+  },
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "workflow",
+    "multi-agent",
+    "orchestration",
+    "automation"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Codex Workflows",
+    "shortDescription": "Deterministic, resumable agent orchestration",
+    "longDescription": "Write ordinary JavaScript that runs Codex agents in parallel or as pipelines, persists results, and resumes without repeating successful work.",
+    "developerName": "Ali Hsareini",
+    "category": "Engineering",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Turn this task into a resumable Codex workflow",
+      "Run independent reviewers in parallel and synthesize their findings",
+      "Resume the last failed workflow without repeating successful agents"
+    ]
+  }
+}

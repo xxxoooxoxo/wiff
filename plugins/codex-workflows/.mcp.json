@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "codex-workflows": {
+      "command": "node",
+      "args": ["./src/server.mjs"],
+      "cwd": ".",
+      "default_tools_approval_mode": "approve"
+    }
+  }
+}
