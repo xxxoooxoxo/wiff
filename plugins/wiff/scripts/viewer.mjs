@@ -10,8 +10,11 @@ import { fileURLToPath } from "node:url";
 const HTML_PATH = fileURLToPath(new URL("./viewer.html", import.meta.url));
 
 function defaultStateRoot() {
-  const codexHome = process.env.CODEX_HOME ?? path.join(os.homedir(), ".codex");
-  return process.env.CODEX_WORKFLOW_HOME ?? path.join(codexHome, "workflows");
+  return (
+    process.env.WIFF_HOME ??
+    process.env.CODEX_WORKFLOW_HOME ??
+    path.join(os.homedir(), ".wiff")
+  );
 }
 
 function parseArgs(argv) {
