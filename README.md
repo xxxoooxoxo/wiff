@@ -84,6 +84,17 @@ Status, waits, cancellation, and resume all work across host restarts — a seco
 
 See [the API reference](plugins/wiff/skills/workflow/references/api.md) for the full script contract and [`examples/verify-and-fix.js`](plugins/wiff/examples/verify-and-fix.js) for a staged example.
 
+## Live viewer
+
+Watch every run — and every agent inside it — in a local web UI:
+
+```sh
+cd plugins/wiff
+npm run viewer     # http://127.0.0.1:4979  (--port / --root to override)
+```
+
+Zero dependencies, read-only over the run files, so it can watch runs owned by any process. A live strip across the top shows **every running agent in every run** with what it's doing right now (its latest command, file edit, or thought, tailed from the transcript). Below that: per-phase agent cards with live status lines, a gantt timeline, token counts, kept worktrees, and a click-through live-tailing transcript drawer. Light and dark themes.
+
 ## Roadmap
 
 - [Model-agnostic backends](https://github.com/xxxoooxoxo/wiff/issues/1) — run individual agents on Claude or Gemini alongside Codex, routed by model name.
