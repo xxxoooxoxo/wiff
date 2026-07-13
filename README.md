@@ -2,7 +2,7 @@
 
 **Deterministic, resumable multi-agent workflows for [Codex](https://github.com/openai/codex) — written as plain JavaScript. Like `wf`, but wiff.**
 
-![MIT License](https://img.shields.io/badge/license-MIT-blue) ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen) ![Version](https://img.shields.io/badge/version-0.3.0-informational)
+![MIT License](https://img.shields.io/badge/license-MIT-blue) ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen) ![Version](https://img.shields.io/badge/version-0.3.1-informational)
 
 Fan a task out to a fleet of Codex agents with a small script instead of a prayer. You write ordinary JavaScript with `agent()`, `parallel()`, and `pipeline()`; the runtime executes it in the background, journals every step, and — when a run dies halfway through — resumes it without re-paying for a single completed agent.
 
@@ -70,7 +70,7 @@ Installing the plugin auto-approves its four workflow-controller tools so headle
 
 The plugin is an MCP server exposing four tools: `workflow_start`, `workflow_status`, `workflow_wait`, `workflow_cancel`. A started workflow runs its script inside a locked-down Node `vm` (no imports, filesystem, shell, network, time, or randomness — those all throw). Each `agent()` call is dispatched to a shared local `codex app-server`, which runs the child thread with your model/effort/sandbox settings; recursive orchestration is disabled inside children.
 
-Everything about a run persists under `~/.codex/workflows/runs/<runId>/`:
+Everything about a run persists under `~/.wiff/runs/<runId>/`:
 
 ```
 run.json         status, phase, counters, failures, kept worktrees

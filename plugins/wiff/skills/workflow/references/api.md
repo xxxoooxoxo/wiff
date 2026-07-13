@@ -80,4 +80,4 @@ Record phase and diagnostic events in the run journal.
 - `workflow_wait`: wait up to 55 seconds for state to change or finish.
 - `workflow_cancel`: interrupt a live run.
 
-Run artifacts are stored under `~/.codex/workflows/runs/<runId>/` unless `CODEX_WORKFLOW_HOME` overrides the root.
+Run artifacts are stored under `~/.wiff/runs/<runId>/` unless `WIFF_HOME` (or legacy `CODEX_WORKFLOW_HOME`) overrides the root.

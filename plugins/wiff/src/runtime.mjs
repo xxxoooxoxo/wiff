@@ -34,8 +34,11 @@ const WORKER_PATH = fileURLToPath(new URL("./workflow-worker.mjs", import.meta.u
 const SOURCE_DIRECTORY = path.dirname(WORKER_PATH);
 
 function defaultStateRoot() {
-  const codexHome = process.env.CODEX_HOME ?? path.join(os.homedir(), ".codex");
-  return process.env.CODEX_WORKFLOW_HOME ?? path.join(codexHome, "workflows");
+  return (
+    process.env.WIFF_HOME ??
+    process.env.CODEX_WORKFLOW_HOME ??
+    path.join(os.homedir(), ".wiff")
+  );
 }
 
 function defaultAgentsDir() {
@@ -186,6 +189,10 @@ export class WorkflowManager {
       const resumeCwd = input.cwd ?? run.cwd;
       source = await this.#readSource(input, resumeCwd, path.join(runDirectory, "script.js"));
       run.cwd = resumeCwd;
+      // Recompute stored absolute paths so runs survive a state-root relocation.
+      run.scriptPath = path.join(runDirectory, "script.js");
+      run.journalPath = path.join(runDirectory, "journal.jsonl");
+      run.runPath = path.join(runDirectory, "run.json");
       if (input.scriptPath) {
         run.sourceInputPath = path.isAbsolute(input.scriptPath)
           ? input.scriptPath
