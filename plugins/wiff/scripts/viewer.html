@@ -121,6 +121,27 @@
   .tl-bar.cached { background: var(--cached); }
   .tl-dur { color: var(--ink-3); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
   .tl-axis { display: flex; justify-content: space-between; color: var(--ink-3); font-size: 10px; margin-top: 6px; }
+  .tl-phase {
+    display: grid; grid-template-columns: 200px 1fr 90px; gap: 10px; align-items: center;
+    padding: 8px 0 3px; margin-top: 6px; border-top: 1px dashed var(--line);
+  }
+  .tl-phase:first-child { border-top: none; margin-top: 0; padding-top: 2px; }
+  .tl-phase .name {
+    font-weight: 650; font-size: 12px; display: flex; gap: 7px; align-items: center;
+    overflow: hidden; white-space: nowrap;
+  }
+  .tl-phase-track { position: relative; height: 6px; }
+  .tl-phase-bar {
+    position: absolute; top: 0; bottom: 0; border-radius: 3px;
+    background: var(--surface-3); outline: 1px solid var(--line); min-width: 4px;
+  }
+  .tl-row .tl-label { padding-left: 14px; }
+  .mode-badge {
+    font-size: 10px; padding: 1px 8px; border-radius: 999px; font-weight: 650; flex: none;
+    letter-spacing: .02em;
+  }
+  .mode-badge.parallel { color: var(--running); background: var(--running-bg); }
+  .mode-badge.series { color: var(--ink-2); background: var(--surface-3); }
   .legend { display: flex; gap: 12px; margin-top: 10px; color: var(--ink-2); font-size: 11px; flex-wrap: wrap; }
   .legend span { display: inline-flex; align-items: center; gap: 5px; }
   .swatch { width: 10px; height: 10px; border-radius: 3px; }
@@ -227,6 +248,7 @@ const fmtDur = (ms) => {
   return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
 };
 const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString() : "");
+const fmtTokens = (n) => new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(n);
 const STATUS_ICON = { running: "▶", completed: "✓", failed: "✕", cached: "↺", cancelled: "⊘", interrupted: "⏸" };
 const KIND_ICON = { exec: "❯", edit: "✎", thinking: "…", message: "💬", search: "🔎", tool: "⚙" };
 const pill = (status) => `<span class="pill ${esc(status)}">${STATUS_ICON[status] ?? ""} ${esc(status)}</span>`;
@@ -260,14 +282,58 @@ function deriveAgents(journal) {
       row.transcript = row.transcript ?? event.transcriptPath?.split("/").pop();
       byKey.set(event.key, row);
     } else if (event.type === "agent.cached") {
+      // Keep label/options/usage from a prior attempt's completed event so cached
+      // rows still show what they cost and count toward the run's token total.
+      const prior = byKey.get(event.key);
       byKey.set(event.key, {
-        key: event.key, label: event.key, phase: "cached", status: "cached",
-        startedAt: event.at, endedAt: event.at, options: {},
+        key: event.key, label: prior?.label ?? event.key, phase: prior?.phase ?? "cached", status: "cached",
+        startedAt: event.at, endedAt: event.at, options: prior?.options ?? {}, usage: prior?.usage,
+        transcript: prior?.transcript,
         worktreePath: event.worktreePath, worktreeKept: event.worktreeKept,
       });
     }
   }
   return [...byKey.values()];
+}
+
+// Phases in first-start order, members sorted by start; series vs parallel from real overlap.
+function phaseGroups(agents) {
+  const byPhase = new Map();
+  for (const agent of agents) {
+    if (!byPhase.has(agent.phase)) byPhase.set(agent.phase, []);
+    byPhase.get(agent.phase).push(agent);
+  }
+  const groups = [...byPhase.entries()].map(([phase, members]) => {
+    members.sort((a, b) => String(a.startedAt ?? "").localeCompare(String(b.startedAt ?? "")));
+    return { phase, members, firstStart: members[0]?.startedAt ?? "" };
+  });
+  groups.sort((a, b) => String(a.firstStart).localeCompare(String(b.firstStart)));
+  return groups;
+}
+
+function maxConcurrency(members, now) {
+  const points = [];
+  for (const member of members) {
+    if (!member.startedAt) continue;
+    points.push([+new Date(member.startedAt), 1]);
+    points.push([+new Date(member.endedAt ?? now), -1]);
+  }
+  points.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  let current = 0;
+  let max = 0;
+  for (const [, delta] of points) {
+    current += delta;
+    if (current > max) max = current;
+  }
+  return max;
+}
+
+function modeBadge(members) {
+  if (members.length < 2) return "";
+  const max = maxConcurrency(members, Date.now());
+  return max > 1
+    ? `<span class="mode-badge parallel">∥ parallel ×${max}</span>`
+    : `<span class="mode-badge series">→ series</span>`;
 }
 
 // ---- runs sidebar -----------------------------------------------------------
@@ -343,13 +409,14 @@ function agentCard(agent) {
 }
 
 function renderSkeleton(run, agents, journal) {
-  const phases = [...new Set(agents.map((agent) => agent.phase))];
-  const cards = phases.map((phase) => {
-    const members = agents.filter((agent) => agent.phase === phase);
-    return `<div class="phase-title">${esc(phase)} <small>${members.length} agent${members.length === 1 ? "" : "s"}</small></div>
-      <div class="cards">${members.map(agentCard).join("")}</div>`;
-  }).join("");
+  const groups = phaseGroups(agents);
+  const cards = groups.map(({ phase, members }) =>
+    `<div class="phase-title">${esc(phase)} ${modeBadge(members)} <small>${members.length} agent${members.length === 1 ? "" : "s"}</small></div>
+      <div class="cards">${members.map(agentCard).join("")}</div>`).join("");
   const timed = agents.filter((agent) => agent.startedAt);
+  const timedGroups = groups
+    .map(({ phase, members }) => ({ phase, members: members.filter((agent) => agent.startedAt) }))
+    .filter(({ members }) => members.length);
   const logs = journal.filter((event) => event.type === "log" || event.type === "phase").slice(-80);
 
   $("main").innerHTML = `
@@ -366,9 +433,15 @@ function renderSkeleton(run, agents, journal) {
     </div>
     <div class="counters">${["requested", "running", "completed", "failed", "cached"].map((name) =>
       `<div class="counter"><div class="n" data-counter="${name}">0</div><div class="l">${name}</div></div>`).join("")}
+      <div class="counter"><div class="n" data-counter="tokens">–</div><div class="l">tokens</div></div>
     </div>
     ${run.error ? `<div class="error-banner">${STATUS_ICON.failed} ${esc(run.error.message)}</div>` : ""}
-    ${timed.length ? `<section><h3>Timeline</h3><div class="timeline">${timed.map(timelineRow).join("")}
+    ${timed.length ? `<section><h3>Timeline</h3><div class="timeline">${timedGroups.map(({ phase, members }) =>
+      `<div class="tl-phase" data-tlphase="${esc(phase)}">
+        <span class="name">${esc(phase)} ${modeBadge(members)}</span>
+        <span class="tl-phase-track"><span class="tl-phase-bar"></span></span>
+        <span class="tl-dur" data-phasedur></span>
+      </div>${members.map(timelineRow).join("")}`).join("")}
       <div class="tl-axis"><span id="tl-start"></span><span id="tl-span"></span><span id="tl-end"></span></div>
       <div class="legend">
         <span><span class="swatch" style="background:var(--running)"></span>running</span>
@@ -401,6 +474,12 @@ function updateDynamic() {
     const el = document.querySelector(`[data-counter="${name}"]`);
     if (el) el.textContent = run.stats?.[name] ?? 0;
   }
+  const tokensEl = document.querySelector('[data-counter="tokens"]');
+  if (tokensEl) {
+    const total = agents.reduce((sum, agent) => sum + (agent.usage?.total?.totalTokens ?? 0), 0);
+    tokensEl.textContent = total ? fmtTokens(total) : "–";
+    tokensEl.title = total ? `${total.toLocaleString()} tokens across ${agents.length} agents` : "";
+  }
 
   // Timeline geometry.
   const timed = agents.filter((agent) => agent.startedAt);
@@ -427,6 +506,21 @@ function updateDynamic() {
       startEl.textContent = fmtTime(new Date(start).toISOString());
       $("tl-span").textContent = fmtDur(span);
       $("tl-end").textContent = fmtTime(new Date(end).toISOString());
+    }
+
+    // Phase-range bars on the shared axis: sequential phases read as adjacent spans.
+    for (const { phase, members } of phaseGroups(timed)) {
+      const row = document.querySelector(`[data-tlphase="${CSS.escape(phase)}"]`);
+      if (!row) continue;
+      const from = Math.min(...members.map((agent) => +new Date(agent.startedAt)));
+      const to = Math.max(...members.map((agent) => +new Date(agent.endedAt ?? now)));
+      const bar = row.querySelector(".tl-phase-bar");
+      bar.style.left = `${((from - start) / span) * 100}%`;
+      bar.style.width = `${Math.max(((to - from) / span) * 100, 0.5)}%`;
+      const phaseTokens = members.reduce((sum, m) => sum + (m.usage?.total?.totalTokens ?? 0), 0);
+      bar.title = `${phase} — ${fmtDur(to - from)}${phaseTokens ? ` · ${phaseTokens.toLocaleString()} tok` : ""}`;
+      row.querySelector("[data-phasedur]").textContent =
+        `${fmtDur(to - from)}${phaseTokens ? ` · ${fmtTokens(phaseTokens)}` : ""}`;
     }
   }
 
