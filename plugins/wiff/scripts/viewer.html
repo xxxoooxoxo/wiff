@@ -537,8 +537,9 @@ async function renderDrawerBody() {
       const item = event?.params?.item;
       let text = "";
       if (item?.text) text = item.text;
+      else if (item?.summary_text) text = item.summary_text;
       else if (item?.command) text = `$ ${item.command}`;
-      else if (event?.params?.delta) return "";
+      else if (item || event?.params?.delta) return ""; // empty items and stream deltas are noise
       else text = JSON.stringify(event?.params ?? event, null, 2);
       if (text.length > 4000) text = `${text.slice(0, 4000)}\n… (truncated)`;
       return `<div class="tr-event"><div class="m mono">${fmtTime(at)} · ${esc(event?.method ?? "")}${item?.type ? ` · ${esc(item.type)}` : ""}</div><pre class="mono">${esc(text)}</pre></div>`;

@@ -246,8 +246,9 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url, `http://127.0.0.1:${port}`);
   try {
     if (url.pathname === "/" || url.pathname === "/index.html") {
+      const html = await readFile(HTML_PATH, "utf8"); // read before writeHead so a failure can still 500
       response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-      response.end(await readFile(HTML_PATH, "utf8"));
+      response.end(html);
       return;
     }
     if (url.pathname === "/api/runs") {
