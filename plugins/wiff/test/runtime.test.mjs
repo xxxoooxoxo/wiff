@@ -134,6 +134,20 @@ test("runs parallel agents and a sequential pipeline", async () => {
   });
 });
 
+test("normalizes the provider option and passes it to the backend", async () => {
+  await withManager(async ({ manager, backend }) => {
+    const script = `
+      export const meta = { name: "provider", description: "Prove provider routing input" };
+      return await agent("hello", { key: "routed", provider: "Claude", model: "claude-opus-4-8" });
+    `;
+    const started = await manager.start({ script, cwd: process.cwd() });
+    const run = await waitForTerminal(manager, started.runId);
+    assert.equal(run.status, "completed");
+    assert.equal(backend.calls[0].options.provider, "claude");
+    assert.equal(backend.calls[0].options.model, "claude-opus-4-8");
+  });
+});
+
 test("parallel fails the workflow when any agent rejects", async () => {
   await withManager(async ({ manager }) => {
     const script = `

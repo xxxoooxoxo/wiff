@@ -103,12 +103,18 @@ Installing the plugin auto-approves its four workflow-controller tools so headle
 ## Using from other harnesses (Claude Code, Cursor, any MCP client)
 
 The Codex *plugin* is just packaging. The engine underneath is a plain stdio MCP server, so any
-MCP-speaking harness can orchestrate wiff workflows. The mental model: **the orchestrator is
-pluggable, the workers are not** — whoever drives, `agent()` children always run on Codex via a
-local `codex app-server`.
+MCP-speaking harness can orchestrate wiff workflows. The mental model: **both the orchestrator
+and the workers are pluggable** — whoever drives, each `agent()` child runs on a backend chosen
+from its model name: `gpt-*`/`o*` models run as native Codex threads via a local
+`codex app-server`, `claude-*`/`opus`/`sonnet`/`haiku`/`fable` models run as headless `claude`
+agents, and a workflow can mix both (`provider: "codex" | "claude"` overrides the inference,
+`WIFF_BACKEND` sets the fallback for unrecognized models). On the Claude backend, `sandbox` is
+enforced by permission policy instead of the OS, so `workspace-write` requires
+`isolation: "worktree"`.
 
-Requirements on the machine, regardless of harness: the `codex` CLI installed and authenticated,
-Node >= 22, and git if you use `isolation: "worktree"`.
+Requirements on the machine, regardless of harness: Node >= 22, git if you use
+`isolation: "worktree"`, and the CLI of whichever backend your agents use (`codex` and/or
+`claude`), installed and authenticated.
 
 **Claude Code** — the plugin install above is the easy path. To wire just the server manually:
 
