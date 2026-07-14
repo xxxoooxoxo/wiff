@@ -2,7 +2,7 @@
 
 **Harness-agnostic, deterministic, resumable multi-agent workflows — written as plain JavaScript. Like `wf`, but wiff.**
 
-![MIT License](https://img.shields.io/badge/license-MIT-blue) ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen) ![Version](https://img.shields.io/badge/version-0.4.0-informational)
+[![npm](https://img.shields.io/npm/v/%40xxxoooxoxo%2Fwiff?label=npm&color=cb3837)](https://www.npmjs.com/package/@xxxoooxoxo/wiff) [![MCP Registry](https://img.shields.io/badge/MCP_Registry-io.github.xxxoooxoxo%2Fwiff-6b46c1)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.xxxoooxoxo/wiff) ![MIT License](https://img.shields.io/badge/license-MIT-blue) ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
 
 Fan a task out to a fleet of agents with a small script instead of a prayer. You write ordinary JavaScript with `agent()`, `parallel()`, and `pipeline()`; the runtime executes it in the background, journals every step, and — when a run dies halfway through — resumes it without re-paying for a single completed agent. The engine is a plain MCP server with durable on-disk state, so the same run can be started, watched, resumed, or cancelled from **any** MCP client — Codex, Claude Code, Cursor, or a cron job. (Today the *workers* run on [Codex](https://github.com/openai/codex); [model-agnostic backends](https://github.com/xxxoooxoxo/wiff/issues/1) are on the roadmap.)
 
@@ -68,9 +68,24 @@ Ad-hoc multi-agent orchestration ("spawn some subagents for this") is also great
 
 ## Install
 
+**Codex** (plugin: MCP tools + the `$workflow` authoring skill):
+
 ```sh
 codex plugin marketplace add https://github.com/xxxoooxoxo/wiff.git
 codex plugin add wiff@wiff
+```
+
+**Claude Code** (plugin: MCP tools + skill):
+
+```sh
+claude plugin marketplace add xxxoooxoxo/wiff
+claude plugin install wiff@wiff
+```
+
+**Anything else** — the server is on npm ([`@xxxoooxoxo/wiff`](https://www.npmjs.com/package/@xxxoooxoxo/wiff)) and the [official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.xxxoooxoxo/wiff) (`io.github.xxxoooxoxo/wiff`), so registry-aware clients can install it by name, and everything else runs it with npx:
+
+```sh
+npx -y @xxxoooxoxo/wiff        # stdio MCP server
 ```
 
 Or from a local checkout:
@@ -95,10 +110,10 @@ local `codex app-server`.
 Requirements on the machine, regardless of harness: the `codex` CLI installed and authenticated,
 Node >= 22, and git if you use `isolation: "worktree"`.
 
-**Claude Code**
+**Claude Code** — the plugin install above is the easy path. To wire just the server manually:
 
 ```sh
-claude mcp add wiff -- node /path/to/wiff/plugins/wiff/src/server.mjs
+claude mcp add wiff -- npx -y @xxxoooxoxo/wiff
 ```
 
 Tool calls go through Claude Code's own permission system; to skip per-call prompts, allow the
@@ -116,7 +131,7 @@ four tools in `.claude/settings.json`:
 ```json
 {
   "mcpServers": {
-    "wiff": { "command": "node", "args": ["/path/to/wiff/plugins/wiff/src/server.mjs"] }
+    "wiff": { "command": "npx", "args": ["-y", "@xxxoooxoxo/wiff"] }
   }
 }
 ```
@@ -164,8 +179,8 @@ See [the API reference](plugins/wiff/skills/workflow/references/api.md) for the 
 Watch every run — and every agent inside it — in a local web UI:
 
 ```sh
-cd plugins/wiff
-npm run viewer     # http://127.0.0.1:4979  (--port / --root to override)
+npx -p @xxxoooxoxo/wiff wiff-viewer    # http://127.0.0.1:4979  (--port / --root to override)
+# or from a checkout: cd plugins/wiff && npm run viewer
 ```
 
 Zero dependencies, read-only over the run files, so it can watch runs owned by any process. A live strip across the top shows **every running agent in every run** with what it's doing right now (its latest command, file edit, or thought, tailed from the transcript). Below that: per-phase agent cards with live status lines, a gantt timeline, token counts, kept worktrees, and a click-through live-tailing transcript drawer. Light and dark themes.
