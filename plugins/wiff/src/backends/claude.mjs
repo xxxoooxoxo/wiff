@@ -109,6 +109,19 @@ export class ClaudeBackend {
     return args;
   }
 
+  // The claude CLI has no headless model-list command, so report the stable
+  // aliases it resolves itself; full claude-* model ids are also accepted.
+  async listModels() {
+    const efforts = ["low", "medium", "high", "xhigh", "max"];
+    const note = "Alias resolved by the claude CLI; full claude-* model ids are also accepted.";
+    return [
+      { id: "fable", displayName: "Fable", description: "Latest Claude Fable model.", efforts, note },
+      { id: "opus", displayName: "Opus", description: "Latest Claude Opus model.", efforts, note },
+      { id: "sonnet", displayName: "Sonnet", description: "Latest Claude Sonnet model.", efforts, note },
+      { id: "haiku", displayName: "Haiku", description: "Latest Claude Haiku model.", efforts, note },
+    ];
+  }
+
   async runAgent({ prompt, options, instructions, signal, onEvent }) {
     if (this.#closed) throw new Error("Claude backend is closed.");
     if (signal?.aborted) throw signal.reason ?? new Error("Agent aborted.");

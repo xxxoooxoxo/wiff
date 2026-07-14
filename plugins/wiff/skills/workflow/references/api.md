@@ -116,5 +116,8 @@ started but never completed re-run with recovery context injected automatically:
 - `workflow_status`: read current run state.
 - `workflow_wait`: wait up to 55 seconds for state to change or finish.
 - `workflow_cancel`: interrupt a live run.
+- `workflow_models`: list the models each backend can run (with supported reasoning efforts
+  where the backend reports them). Backends that are unavailable on the machine report an
+  error entry instead of failing the listing — useful before writing a mixed-backend script.
 
 Run artifacts are stored under `~/.wiff/runs/<runId>/` unless `WIFF_HOME` (or legacy `CODEX_WORKFLOW_HOME`) overrides the root.

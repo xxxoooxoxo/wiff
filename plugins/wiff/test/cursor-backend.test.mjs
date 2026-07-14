@@ -205,6 +205,22 @@ test("cursor backend surfaces turn failures and aborts via run.cancel", async ()
   assert.ok(hanging.state.cancelled >= 1);
 });
 
+test("cursor backend lists models via Cursor.models.list", async () => {
+  const { module } = makeFakeSdk();
+  module.Cursor = {
+    models: {
+      async list() {
+        return [{ id: "composer-2.5", displayName: "Composer 2.5", aliases: ["composer"] }];
+      },
+    },
+  };
+  const backend = new CursorBackend({ loadSdk: async () => module });
+  const models = await backend.listModels();
+  assert.deepEqual(models, [
+    { id: "composer-2.5", displayName: "Composer 2.5", description: undefined, aliases: ["composer"] },
+  ]);
+});
+
 test("cursor backend reports a missing SDK clearly", async () => {
   const backend = new CursorBackend({
     loadSdk: async () => {

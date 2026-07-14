@@ -47,7 +47,7 @@ test("normal MCP server exposes workflow tools", async () => {
   const tools = await listTools(false);
   assert.deepEqual(
     tools.map(({ name }) => name),
-    ["workflow_start", "workflow_status", "workflow_wait", "workflow_cancel"],
+    ["workflow_start", "workflow_status", "workflow_wait", "workflow_cancel", "workflow_models"],
   );
 });
 

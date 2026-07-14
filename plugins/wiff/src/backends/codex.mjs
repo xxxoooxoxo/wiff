@@ -174,6 +174,21 @@ export class CodexBackend {
     this.#turns.clear();
   }
 
+  async listModels() {
+    await this.start();
+    const response = await this.#request("model/list", {});
+    return (response?.data ?? [])
+      .filter((model) => !model.hidden)
+      .map((model) => ({
+        id: model.id,
+        displayName: model.displayName,
+        description: model.description,
+        efforts: (model.supportedReasoningEfforts ?? []).map((effort) => effort.reasoningEffort),
+        defaultEffort: model.defaultReasoningEffort,
+        isDefault: model.isDefault || undefined,
+      }));
+  }
+
   async runAgent({ prompt, options, instructions, signal, onEvent }) {
     await this.start();
     if (signal?.aborted) throw signal.reason ?? new Error("Agent aborted.");
