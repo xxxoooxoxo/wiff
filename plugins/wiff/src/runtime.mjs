@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { AppServerClient } from "./app-server-client.mjs";
+import { BackendRouter } from "./backends/index.mjs";
 import { Semaphore } from "./semaphore.mjs";
 import {
   JsonlWriter,
@@ -27,7 +27,7 @@ const MAX_SCRIPT_BYTES = 512 * 1024;
 const DEFAULT_AGENT_TIMEOUT_MS = 30 * 60 * 1_000;
 const AGENT_TYPE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 const MAX_PERSONA_BYTES = 64 * 1024;
-const PERSONA_DEFAULT_KEYS = new Set(["model", "effort", "sandbox"]);
+const PERSONA_DEFAULT_KEYS = new Set(["model", "effort", "sandbox", "provider"]);
 const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled", "interrupted"]);
 const CANCEL_FILE_NAME = "cancel.json";
 const WORKER_PATH = fileURLToPath(new URL("./workflow-worker.mjs", import.meta.url));
@@ -233,7 +233,7 @@ export class WorkflowManager {
     this.stateRoot = stateRoot;
     this.runsDirectory = path.join(stateRoot, "runs");
     this.agentsDir = agentsDir ?? defaultAgentsDir();
-    this.backend = backend ?? new AppServerClient();
+    this.backend = backend ?? new BackendRouter();
     this.semaphore = new Semaphore(maxConcurrency ?? defaultConcurrency());
   }
 
@@ -809,8 +809,10 @@ export class WorkflowManager {
       model:
         input.model ??
         personaDefaults.model ??
+        process.env.WIFF_DEFAULT_MODEL ??
         process.env.CODEX_WORKFLOW_DEFAULT_MODEL ??
         "gpt-5.6-sol",
+      provider: input.provider ?? personaDefaults.provider,
       effort: input.effort ?? personaDefaults.effort ?? "high",
       sandbox: input.sandbox ?? personaDefaults.sandbox ?? "read-only",
       schema: input.schema,
@@ -835,6 +837,12 @@ export class WorkflowManager {
     }
     if (typeof options.model !== "string" || !options.model.trim()) {
       throw new Error("agent model must be a non-empty string.");
+    }
+    if (options.provider !== undefined) {
+      if (typeof options.provider !== "string" || !/^[a-z][a-z0-9-]*$/i.test(options.provider)) {
+        throw new Error("agent provider must be a simple name (e.g. codex, claude).");
+      }
+      options.provider = options.provider.toLowerCase();
     }
     if (typeof options.effort !== "string" || !options.effort.trim()) {
       throw new Error("agent effort must be a non-empty string.");

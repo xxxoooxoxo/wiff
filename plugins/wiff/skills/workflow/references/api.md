@@ -34,13 +34,14 @@ The JSON value supplied to `workflow_start`.
 
 ### `agent(prompt, options)`
 
-Start one Codex thread and return its final response. With `schema`, return parsed JSON; otherwise return text.
+Start one child agent and return its final response. With `schema`, return parsed JSON; otherwise return text. The backend is chosen per agent from the model name (see Backends below).
 
 Options:
 
 - `key`: stable resume/cache key. Strongly recommended.
 - `label`: human-readable activity label.
-- `model`: Codex model id. Defaults to `gpt-5.6-sol`.
+- `model`: model id. Defaults to `gpt-5.6-sol` (override with `WIFF_DEFAULT_MODEL`). The model prefix picks the backend: `gpt-*`/`o*`/`codex*` run on Codex, `claude-*`/`opus`/`sonnet`/`haiku`/`fable` run on Claude Code.
+- `provider`: explicit backend (`codex` or `claude`), overriding model-prefix inference.
 - `effort`: reasoning effort. Defaults to `high`.
 - `sandbox`: `read-only`, `workspace-write`, or `danger-full-access`. Defaults to `read-only`.
 - `schema`: JSON Schema for the final response.
@@ -53,9 +54,25 @@ Options:
   repository. Use this whenever multiple `workspace-write` agents run concurrently.
 - `agentType`: name of a persona applied as the child's developer instructions. Resolved from
   `<cwd>/.codex/agents/<name>.md`, then `~/.codex/agents/<name>.md` (override the latter with
-  `CODEX_WORKFLOW_AGENTS_DIR`). Optional `---` frontmatter keys `model`, `effort`, and
-  `sandbox` become defaults for the agent; explicit options win. Editing a persona invalidates
-  cached results for agents that use it.
+  `CODEX_WORKFLOW_AGENTS_DIR`). Optional `---` frontmatter keys `model`, `effort`, `sandbox`,
+  and `provider` become defaults for the agent; explicit options win. Editing a persona
+  invalidates cached results for agents that use it.
+
+## Backends
+
+Agents run on a pluggable backend selected per call: explicit `provider` option, else the
+`model` prefix, else `WIFF_BACKEND` (defaults to `codex`). Mixed-backend workflows just work —
+`model` is part of the cache key, so resume semantics are identical across backends.
+
+- **codex** — native Codex threads over one long-lived `codex app-server` process. `sandbox`
+  is OS-enforced; `schema` uses native structured output.
+- **claude** — one headless `claude -p` process per agent (`--no-session-persistence`, user
+  settings/hooks/MCP servers disabled). `schema` maps to native `--json-schema`; personas map
+  to `--append-system-prompt`; `effort` maps directly (Claude additionally accepts `max`).
+  There is no OS sandbox, so sandbox levels map to permission policy: `read-only` exposes only
+  the Read/Glob/Grep tools; `workspace-write` **requires `isolation: "worktree"`** (the
+  worktree is the write-isolation mechanism) and enables auto-accepted edits plus Bash;
+  `danger-full-access` bypasses permissions entirely.
 
 ### `parallel(thunks, options?)`
 
