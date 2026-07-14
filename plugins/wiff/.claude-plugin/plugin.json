@@ -1,0 +1,18 @@
+{
+  "name": "wiff",
+  "version": "0.4.0",
+  "description": "Deterministic, resumable multi-agent workflows that orchestrate Codex agents — workflow_start/status/wait/cancel MCP tools plus the workflow-authoring skill.",
+  "author": {
+    "name": "Ali Hsareini",
+    "url": "https://github.com/xxxoooxoxo"
+  },
+  "homepage": "https://github.com/xxxoooxoxo/wiff",
+  "license": "MIT",
+  "keywords": ["codex", "workflow", "multi-agent", "orchestration", "mcp"],
+  "mcpServers": {
+    "wiff": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/src/server.mjs"]
+    }
+  }
+}

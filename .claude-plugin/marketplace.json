@@ -1,0 +1,15 @@
+{
+  "name": "wiff",
+  "owner": {
+    "name": "Ali Hsareini",
+    "url": "https://github.com/xxxoooxoxo"
+  },
+  "plugins": [
+    {
+      "name": "wiff",
+      "source": "./plugins/wiff",
+      "description": "Deterministic, resumable multi-agent workflows: fan work out to Codex agents from JavaScript scripts, with journaled resume, worktree isolation, and personas.",
+      "category": "workflow"
+    }
+  ]
+}

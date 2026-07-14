@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.xxxoooxoxo/wiff",
+  "description": "Deterministic, resumable multi-agent workflows for Codex: script-driven fan-out to Codex agents with journaled resume, git worktree isolation, and personas — drivable from any MCP client.",
+  "repository": {
+    "url": "https://github.com/xxxoooxoxo/wiff",
+    "source": "github"
+  },
+  "version": "0.4.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "wiff",
+      "version": "0.4.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
