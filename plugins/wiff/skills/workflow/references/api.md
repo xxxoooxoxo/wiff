@@ -73,6 +73,19 @@ Run items concurrently and stages sequentially per item. The first stage receive
 
 Record phase and diagnostic events in the run journal.
 
+## Mid-turn resume
+
+Resuming a run replays completed agents from cache; agents whose previous attempt
+started but never completed re-run with recovery context injected automatically:
+
+- The prompt is prefixed with a `[resume]` digest of the interrupted attempt's
+  transcript tail (commands run, files edited, findings), instructing the agent to
+  continue rather than start over.
+- With `isolation: "worktree"`, the interrupted attempt's partial checkout is handed
+  to the new attempt instead of being recreated, so file work already done survives.
+- Cache keys are unaffected: the digest is injected after hashing, so a later resume
+  still replays the completed result.
+
 ## MCP tools
 
 - `workflow_start`: launch new work or resume an existing run.

@@ -1,5 +1,5 @@
 import { execFile, fork } from "node:child_process";
-import { readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -116,8 +116,11 @@ function timeoutSignal(parentSignal, timeoutMs, label) {
 
 async function loadCache(journalPath) {
   const cache = new Map();
+  // Prior attempts that started but never completed, for mid-turn resume injection.
+  const unfinished = new Map();
   for (const event of await readJsonl(journalPath)) {
     if (event.type === "agent.completed") {
+      unfinished.delete(event.key);
       cache.set(event.key, {
         inputHash: event.inputHash,
         result: event.result,
@@ -126,9 +129,91 @@ async function loadCache(journalPath) {
         worktreePath: event.worktreePath,
         worktreeKept: event.worktreeKept,
       });
+    } else if (event.type === "agent.started") {
+      unfinished.set(event.key, {
+        inputHash: event.inputHash,
+        transcriptPath: event.transcriptPath,
+        worktreePath: event.worktreePath,
+        startedAt: event.at,
+      });
     }
   }
-  return cache;
+  return { cache, unfinished };
+}
+
+// Human-readable line for one transcript notification, for resume digests.
+function describeTranscriptEvent(entry) {
+  const item = entry?.event?.params?.item;
+  if (!item) return null;
+  const clip = (value, max = 200) => String(value).replace(/\s+/g, " ").trim().slice(0, max);
+  if (item.type === "commandExecution" && item.command) return `ran: ${clip(item.command)}`;
+  if (item.type === "fileChange") {
+    const files = (item.changes ?? []).map((change) => change.path).filter(Boolean);
+    if (files.length) return `edited: ${files.slice(0, 5).join(", ")}${files.length > 5 ? ` (+${files.length - 5} more)` : ""}`;
+  }
+  if (item.type === "reasoning" && (item.summary_text ?? item.text)) {
+    return `noted: ${clip(item.summary_text ?? item.text)}`;
+  }
+  if (item.type === "agentMessage" && item.text) return `said: ${clip(item.text, 400)}`;
+  if (item.type === "webSearch" && item.query) return `searched: ${clip(item.query)}`;
+  return null;
+}
+
+const DIGEST_MAX_LINES = 40;
+const DIGEST_MAX_CHARS = 6_000;
+const TRANSCRIPT_TAIL_BYTES = 256 * 1024;
+
+// Digest the tail of an interrupted attempt's transcript into "what got done" lines.
+async function transcriptDigest(transcriptPath) {
+  if (!transcriptPath) return null;
+  let handle;
+  try {
+    handle = await open(transcriptPath, "r");
+  } catch {
+    return null;
+  }
+  let text;
+  try {
+    const { size } = await handle.stat();
+    const start = Math.max(0, size - TRANSCRIPT_TAIL_BYTES);
+    const buffer = Buffer.alloc(size - start);
+    await handle.read(buffer, 0, buffer.length, start);
+    text = buffer.toString("utf8");
+    if (start > 0) text = text.slice(text.indexOf("\n") + 1);
+  } finally {
+    await handle.close();
+  }
+  const lines = [];
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const described = describeTranscriptEvent(entry);
+    if (described) lines.push(described);
+  }
+  const tail = lines.slice(-DIGEST_MAX_LINES);
+  let digest = tail.join("\n");
+  if (digest.length > DIGEST_MAX_CHARS) digest = digest.slice(-DIGEST_MAX_CHARS);
+  return digest || null;
+}
+
+function continuationPreamble(digest, startedAt, worktreeReused) {
+  return [
+    `[resume] A previous attempt at this exact task (started ${startedAt}) was interrupted before finishing.`,
+    "Progress digest from that attempt, oldest to newest:",
+    "---",
+    digest,
+    "---",
+    worktreeReused
+      ? "Its partial file changes are still present in your working directory — inspect them (e.g. git status/diff) before continuing."
+      : null,
+    "Continue the task from where it left off. Verify anything uncertain instead of assuming; do not redo work the digest shows as completed.",
+    "",
+  ].filter((part) => part !== null).join("\n");
 }
 
 async function assertDirectory(directory) {
@@ -258,6 +343,7 @@ export class WorkflowManager {
       promise: undefined,
       stopKind: undefined,
       cancelWatcher: undefined,
+      pendingAgents: new Set(),
     };
     this.#active.set(runId, execution);
     execution.cancelWatcher = this.#watchCancellation(run, execution);
@@ -288,7 +374,7 @@ export class WorkflowManager {
 
   async #execute(run, source, execution) {
     const journal = new JsonlWriter(run.journalPath);
-    const cache = await loadCache(run.journalPath);
+    const { cache, unfinished } = await loadCache(run.journalPath);
     await journal.append({
       type: run.attempt > 1 ? "run.resumed" : "run.started",
       at: new Date().toISOString(),
@@ -298,7 +384,7 @@ export class WorkflowManager {
     });
 
     try {
-      const result = await this.#runWorker({ run, source, execution, journal, cache });
+      const result = await this.#runWorker({ run, source, execution, journal, cache, unfinished });
       run.status = "completed";
       run.result = jsonClone(result, "workflow result");
       await journal.append({
@@ -323,6 +409,10 @@ export class WorkflowManager {
         error: run.error,
       });
     } finally {
+      // In-flight agent handlers journal failures and touch run state; let them
+      // settle before the terminal persist so a subsequent resume can't be
+      // clobbered by a stale write.
+      await Promise.allSettled([...execution.pendingAgents]);
       run.completedAt = new Date().toISOString();
       run.updatedAt = run.completedAt;
       run.revision += 1;
@@ -334,7 +424,7 @@ export class WorkflowManager {
     return run;
   }
 
-  #runWorker({ run, source, execution, journal, cache }) {
+  #runWorker({ run, source, execution, journal, cache, unfinished }) {
     const worker = fork(WORKER_PATH, [], {
       execArgv: ["--permission", `--allow-fs-read=${SOURCE_DIRECTORY}`],
       stdio: ["ignore", "ignore", "pipe", "ipc"],
@@ -375,8 +465,11 @@ export class WorkflowManager {
             .append({ type: "log", at: new Date().toISOString(), value: message.value })
             .catch(fail);
         } else if (message?.type === "agent.request") {
-          this.#handleAgentRequest({ run, worker, message, journal, cache, execution })
-            .catch(fail);
+          const handling = this.#handleAgentRequest({
+            run, worker, message, journal, cache, unfinished, execution,
+          });
+          execution.pendingAgents.add(handling);
+          handling.catch(fail).finally(() => execution.pendingAgents.delete(handling));
         } else if (message?.type === "done" && !settled) {
           settled = true;
           resolve(message.result);
@@ -445,7 +538,7 @@ export class WorkflowManager {
     return timer;
   }
 
-  async #handleAgentRequest({ run, worker, message, journal, cache, execution }) {
+  async #handleAgentRequest({ run, worker, message, journal, cache, unfinished, execution }) {
     const respond = (payload) => {
       if (worker.connected) worker.send({ type: "agent.response", id: message.id, ...payload });
     };
@@ -490,8 +583,21 @@ export class WorkflowManager {
         return;
       }
 
+      // Mid-turn resume: a prior attempt started this exact agent but never finished —
+      // inject a digest of its transcript and, for worktree agents, keep its partial checkout.
+      const prior = unfinished.get(key);
+      const continuation =
+        prior?.inputHash === inputHash
+          ? { digest: await transcriptDigest(prior.transcriptPath), startedAt: prior.startedAt }
+          : null;
+
       const worktree =
-        options.isolation === "worktree" ? await this.#createWorktree(run, key) : null;
+        options.isolation === "worktree"
+          ? await this.#createWorktree(run, key, { reuse: continuation !== null })
+          : null;
+      const prompt = continuation?.digest
+        ? continuationPreamble(continuation.digest, continuation.startedAt, worktree?.reused ?? false) + message.prompt
+        : message.prompt;
       const transcriptPath = path.join(
         path.dirname(run.runPath),
         "agents",
@@ -510,6 +616,8 @@ export class WorkflowManager {
         transcriptPath,
         options,
         worktreePath: worktree?.path,
+        resumedMidTurn: continuation?.digest ? true : undefined,
+        worktreeReused: worktree?.reused || undefined,
       });
       await this.#touch(run);
 
@@ -522,7 +630,7 @@ export class WorkflowManager {
         const response = await this.semaphore.run(
           () =>
             this.backend.runAgent({
-              prompt: message.prompt,
+              prompt,
               options: worktree ? { ...options, cwd: worktree.path } : options,
               instructions: persona?.instructions,
               signal: timed.signal,
@@ -626,7 +734,7 @@ export class WorkflowManager {
     return result;
   }
 
-  #createWorktree(run, key) {
+  #createWorktree(run, key, { reuse = false } = {}) {
     return this.#withWorktreeLock(async () => {
       const repoRoot = (
         await this.#git(
@@ -645,8 +753,14 @@ export class WorkflowManager {
         (info) => info.isDirectory(),
         () => false,
       );
+      if (exists && reuse) {
+        // Mid-turn resume: hand the interrupted attempt's partial checkout to the new attempt.
+        const usable = await this.#git(worktreePath, ["status", "--porcelain"], "git status")
+          .then(() => true, () => false);
+        if (usable) return { path: worktreePath, repoRoot, reused: true };
+      }
       if (exists) {
-        // A previous interrupted attempt left an unharvested worktree; rerun from scratch.
+        // Unharvested or broken worktree from a previous attempt; rerun from scratch.
         await execFileAsync("git", [
           "-C",
           repoRoot,
@@ -663,7 +777,7 @@ export class WorkflowManager {
         ["worktree", "add", "--detach", worktreePath, "HEAD"],
         "git worktree add",
       );
-      return { path: worktreePath, repoRoot };
+      return { path: worktreePath, repoRoot, reused: false };
     });
   }
 

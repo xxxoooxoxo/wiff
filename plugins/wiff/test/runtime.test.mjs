@@ -20,11 +20,26 @@ class FakeBackend {
       await writeFile(path.join(options.cwd, prompt.slice("WRITE:".length)), "made by agent\n");
     }
     onEvent?.({ method: "fake/started", params: { prompt } });
-    if (prompt === "WAIT") {
-      await new Promise((resolve, reject) => {
+    const hang = () =>
+      new Promise((resolve, reject) => {
         const onAbort = () => reject(signal.reason ?? new Error("aborted"));
         signal.addEventListener("abort", onAbort, { once: true });
       });
+    if (prompt === "WAIT") {
+      onEvent?.({
+        method: "item/completed",
+        params: { item: { type: "commandExecution", command: "echo checkpoint-alpha" } },
+      });
+      await hang();
+    }
+    if (prompt.startsWith("WRITE-WAIT:")) {
+      const name = prompt.slice("WRITE-WAIT:".length).trim();
+      await writeFile(path.join(options.cwd, name), "partial\n");
+      onEvent?.({
+        method: "item/completed",
+        params: { item: { type: "fileChange", changes: [{ path: name }] } },
+      });
+      await hang();
     }
     if (prompt === "SLOW") {
       await new Promise((resolve) => setTimeout(resolve, 300));
@@ -435,5 +450,56 @@ test("editing a persona invalidates the resume cache", async () => {
     );
   } finally {
     await rm(agentsDir, { recursive: true, force: true });
+  }
+});
+
+test("interrupted agents resume mid-turn with a transcript digest injected", async () => {
+  await withManager(async ({ manager, backend }) => {
+    const script = `
+      export const meta = { name: "midturn", description: "Prove mid-turn digest injection" };
+      return await agent("WAIT", { key: "w", timeoutMs: 60000 });
+    `;
+    const started = await manager.start({ script, cwd: process.cwd() });
+    while (backend.calls.length === 0) await new Promise((r) => setTimeout(r, 20));
+    await manager.cancel(started.runId);
+
+    const resumed = await manager.start({ resumeFromRunId: started.runId });
+    const final = await waitForTerminal(manager, resumed.runId);
+    assert.equal(final.status, "completed");
+    assert.equal(backend.calls.length, 2);
+    const retryPrompt = backend.calls[1].prompt;
+    assert.match(retryPrompt, /^\[resume\]/);
+    assert.match(retryPrompt, /ran: echo checkpoint-alpha/);
+    assert.match(retryPrompt, /WAIT$/, "original prompt stays at the end");
+    assert.equal(final.stats.cached, 0);
+  });
+});
+
+test("mid-turn resume reuses the interrupted attempt's worktree", async () => {
+  const repo = await makeGitRepo();
+  try {
+    await withManager(async ({ manager, backend }) => {
+      const script = `
+        export const meta = { name: "midturn-wt", description: "Prove worktree handoff on resume" };
+        return await agent("WRITE-WAIT:partial.txt", {
+          key: "w", isolation: "worktree", sandbox: "workspace-write", timeoutMs: 60000,
+        });
+      `;
+      const started = await manager.start({ script, cwd: repo });
+      while (backend.calls.length === 0) await new Promise((r) => setTimeout(r, 20));
+      await manager.cancel(started.runId);
+
+      const resumed = await manager.start({ resumeFromRunId: started.runId });
+      const final = await waitForTerminal(manager, resumed.runId);
+      assert.equal(final.status, "completed");
+      assert.equal(backend.calls.length, 2);
+      assert.equal(backend.calls[1].options.cwd, backend.calls[0].options.cwd, "same worktree");
+      assert.equal(await exists(path.join(backend.calls[1].options.cwd, "partial.txt")), true,
+        "partial work survives the resume");
+      assert.match(backend.calls[1].prompt, /still present in your working directory/);
+    });
+  } finally {
+    await execFileAsync("git", ["-C", repo, "worktree", "prune"]).catch(() => {});
+    await rm(repo, { recursive: true, force: true });
   }
 });
