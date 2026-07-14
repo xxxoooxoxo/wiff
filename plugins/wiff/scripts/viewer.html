@@ -122,6 +122,7 @@
     display: inline-flex; align-items: center; gap: 4px;
     padding: 1px 8px 1px 6px; border-radius: 999px;
     font-size: 11px; font-weight: 500; line-height: 1.6;
+    flex: none; white-space: nowrap; /* never squish or wrap — the label truncates instead */
   }
   .pill.running { color: var(--running); background: var(--running-bg); }
   .pill.completed { color: var(--good); background: var(--good-bg); }
@@ -200,7 +201,7 @@
   .card:hover { background: var(--hover); }
   [data-theme="dark"] .card { border-color: var(--line-strong); }
   .card .top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
-  .card .label { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .label { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card .badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 7px; }
   .badge {
     font-size: 10.5px; color: var(--ink-2); background: var(--surface-3);
