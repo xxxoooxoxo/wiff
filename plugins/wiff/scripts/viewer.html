@@ -24,7 +24,7 @@
   body {
     font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     background: var(--surface); color: var(--ink);
-    display: grid; grid-template-rows: auto auto 1fr; overflow: hidden;
+    display: grid; grid-template-rows: auto 1fr; overflow: hidden;
   }
   code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
 
@@ -41,24 +41,21 @@
   }
   button:hover { background: var(--surface-3); }
 
-  /* Global active-agents strip */
-  #active-strip { border-bottom: 1px solid var(--line); background: var(--surface); max-height: 30vh; overflow-y: auto; }
-  #active-strip:empty { display: none; }
-  .active-row {
-    display: grid; grid-template-columns: auto minmax(140px, 200px) minmax(120px, 180px) 1fr auto;
-    gap: 12px; align-items: center; width: 100%; text-align: left;
-    padding: 6px 16px; border: none; border-bottom: 1px solid var(--line); border-radius: 0;
-    background: none;
+  /* Sidebar section headers + live agent lines under running runs */
+  .side-h {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .06em; font-weight: 650;
+    color: var(--ink-3); padding: 8px 10px 3px;
   }
-  .active-row:last-child { border-bottom: none; }
-  .active-row:hover { background: var(--surface-2); }
-  .active-row .agent { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .active-row .run { color: var(--ink-3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .active-row .now {
-    color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px;
+  .run-item .live {
+    display: flex; align-items: center; gap: 6px; margin-top: 4px;
+    color: var(--ink-2); font-size: 11px; overflow: hidden; white-space: nowrap;
   }
-  .active-row .dur { color: var(--ink-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .run-item .live .dot { width: 6px; height: 6px; }
+  .run-item .live > span:nth-child(2) { font-weight: 600; flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
+  .run-item .live .doing {
+    color: var(--ink-3); overflow: hidden; text-overflow: ellipsis;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px;
+  }
 
   .layout { display: grid; grid-template-columns: 300px 1fr; min-height: 0; }
   aside { border-right: 1px solid var(--line); overflow-y: auto; padding: 8px; }
@@ -209,7 +206,6 @@
   <span class="root" id="tick"></span>
   <button id="theme">◐ theme</button>
 </header>
-<div id="active-strip"></div>
 <div class="layout">
   <aside id="runs"></aside>
   <main id="main"><div class="empty">Loading runs…</div></main>
@@ -336,44 +332,32 @@ function modeBadge(members) {
     : `<span class="mode-badge series">→ series</span>`;
 }
 
-// ---- runs sidebar -----------------------------------------------------------
+// ---- runs sidebar (running workflows pinned on top, with live agent lines) ----
 
-function renderRunsList() {
-  $("runs").innerHTML = runsCache.map((run) => `
+let activeAgents = [];
+
+function runItem(run) {
+  const live = run.status === "running"
+    ? activeAgents.filter((agent) => agent.runId === run.runId)
+    : [];
+  return `
     <button class="run-item ${run.runId === selectedRunId ? "selected" : ""}" data-run="${esc(run.runId)}">
       <span class="name"><span class="dot ${esc(run.status)}"></span>${esc(run.name ?? run.runId)}</span>
       <div class="sub">${pill(run.status)} · ${fmtTime(run.startedAt)}</div>
       <div class="sub mono">${esc(run.runId.slice(0, 14))}… · ${run.stats ? `${run.stats.completed}✓ ${run.stats.failed}✕ ${run.stats.cached}↺` : ""}</div>
-    </button>`).join("") || `<div class="empty">No runs yet.</div>`;
+      ${live.map((agent) => `<div class="live" title="${esc(agent.activity?.text ?? agent.key)}">
+        <span class="dot running"></span><span>${esc(agent.label)}</span><span class="doing">${esc(nowLine(agent.activity))}</span>
+      </div>`).join("")}
+    </button>`;
 }
 
-// ---- global active-agents strip (updated in place, keyed rows) ---------------
-
-function syncActiveStrip(agents) {
-  const strip = $("active-strip");
-  const seen = new Set();
-  for (const agent of agents) {
-    const key = `${agent.runId}::${agent.key}`;
-    seen.add(key);
-    let row = strip.querySelector(`[data-key="${CSS.escape(key)}"]`);
-    if (!row) {
-      row = document.createElement("button");
-      row.className = "active-row";
-      row.dataset.key = key;
-      row.dataset.run = agent.runId;
-      row.innerHTML = `<span class="dot running"></span>
-        <span class="agent" title="${esc(agent.key)}">${esc(agent.label)}</span>
-        <span class="run">${esc(agent.runName)}${agent.phase && agent.phase !== "default" ? ` · ${esc(agent.phase)}` : ""}</span>
-        <span class="now"></span>
-        <span class="dur" data-since="${esc(agent.startedAt)}"></span>`;
-      strip.appendChild(row);
-    }
-    row.querySelector(".now").textContent = nowLine(agent.activity);
-    row.querySelector(".now").title = agent.activity?.text ?? "";
-  }
-  for (const row of [...strip.children]) {
-    if (!seen.has(row.dataset.key)) row.remove();
-  }
+function renderRunsList() {
+  const running = runsCache.filter((run) => run.status === "running");
+  const rest = runsCache.filter((run) => run.status !== "running");
+  $("runs").innerHTML = [
+    running.length ? `<div class="side-h">Running</div>${running.map(runItem).join("")}` : "",
+    rest.length ? `<div class="side-h">${running.length ? "History" : "Runs"}</div>${rest.map(runItem).join("")}` : "",
+  ].join("") || `<div class="empty">No runs yet.</div>`;
 }
 
 // ---- run detail: skeleton render + in-place dynamic updates -------------------
@@ -594,12 +578,13 @@ async function refreshDetail() {
 async function refreshActive() {
   try {
     const payload = await fetchJson("/api/active");
-    syncActiveStrip(payload.agents);
+    activeAgents = payload.agents;
+    renderRunsList();
     $("tick").textContent = payload.agents.length
       ? `● ${payload.agents.length} agent${payload.agents.length === 1 ? "" : "s"} live`
       : "";
   } catch {
-    // Transient — leave the strip as-is.
+    // Transient — leave the sidebar as-is.
   }
 }
 
