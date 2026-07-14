@@ -66,6 +66,58 @@ Then start a new Codex session and either invoke the bundled skill with `$workfl
 
 Installing the plugin auto-approves its four workflow-controller tools so headless and desktop runs don't stop at an MCP approval prompt. Agent filesystem access is still governed per-call by `sandbox`.
 
+## Using from other harnesses (Claude Code, Cursor, any MCP client)
+
+The Codex *plugin* is just packaging. The engine underneath is a plain stdio MCP server, so any
+MCP-speaking harness can orchestrate wiff workflows. The mental model: **the orchestrator is
+pluggable, the workers are not** — whoever drives, `agent()` children always run on Codex via a
+local `codex app-server`.
+
+Requirements on the machine, regardless of harness: the `codex` CLI installed and authenticated,
+Node >= 22, and git if you use `isolation: "worktree"`.
+
+**Claude Code**
+
+```sh
+claude mcp add wiff -- node /path/to/wiff/plugins/wiff/src/server.mjs
+```
+
+Tool calls go through Claude Code's own permission system; to skip per-call prompts, allow the
+four tools in `.claude/settings.json`:
+
+```json
+{ "permissions": { "allow": [
+  "mcp__wiff__workflow_start", "mcp__wiff__workflow_status",
+  "mcp__wiff__workflow_wait", "mcp__wiff__workflow_cancel"
+] } }
+```
+
+**Cursor / Windsurf / Claude Desktop** — add the server to the client's `mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "wiff": { "command": "node", "args": ["/path/to/wiff/plugins/wiff/src/server.mjs"] }
+  }
+}
+```
+
+Notes for non-Codex hosts:
+
+- **State is shared.** Every harness reads and writes the same `~/.wiff/runs/`, so a run started
+  from Codex can be watched, cancelled, or resumed from Claude Code (and vice versa), and the
+  live viewer sees everything.
+- **Bring the script contract into context.** The `$workflow` skill only auto-loads inside Codex.
+  From other harnesses, point the model at
+  [`plugins/wiff/skills/workflow/references/api.md`](plugins/wiff/skills/workflow/references/api.md)
+  (or copy the skill into your harness's skill/rules directory, e.g. `.claude/skills/` or Cursor
+  rules) so it authors valid scripts.
+- **Personas** resolve from `<cwd>/.codex/agents/` then `~/.codex/agents/` on every harness; set
+  `CODEX_WORKFLOW_AGENTS_DIR` in the server's env to point somewhere else (e.g. a shared
+  `~/.claude/agents`).
+- `workflow_start` requires an explicit absolute `cwd`, so the server's own working directory
+  doesn't matter to results.
+
 ## How it works
 
 The plugin is an MCP server exposing four tools: `workflow_start`, `workflow_status`, `workflow_wait`, `workflow_cancel`. A started workflow runs its script inside a locked-down Node `vm` (no imports, filesystem, shell, network, time, or randomness — those all throw). Each `agent()` call is dispatched to a shared local `codex app-server`, which runs the child thread with your model/effort/sandbox settings; recursive orchestration is disabled inside children.
