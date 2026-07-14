@@ -40,8 +40,8 @@ Options:
 
 - `key`: stable resume/cache key. Strongly recommended.
 - `label`: human-readable activity label.
-- `model`: model id. Defaults to `gpt-5.6-sol` (override with `WIFF_DEFAULT_MODEL`). The model prefix picks the backend: `gpt-*`/`o*`/`codex*` run on Codex, `claude-*`/`opus`/`sonnet`/`haiku`/`fable` run on Claude Code.
-- `provider`: explicit backend (`codex` or `claude`), overriding model-prefix inference.
+- `model`: model id. Defaults to `gpt-5.6-sol` (override with `WIFF_DEFAULT_MODEL`). The model prefix picks the backend: `gpt-*`/`o*`/`codex*` run on Codex, `claude-*`/`opus`/`sonnet`/`haiku`/`fable` run on Claude Code, `composer-*` runs on Cursor.
+- `provider`: explicit backend (`codex`, `claude`, or `cursor`), overriding model-prefix inference.
 - `effort`: reasoning effort. Defaults to `high`.
 - `sandbox`: `read-only`, `workspace-write`, or `danger-full-access`. Defaults to `read-only`.
 - `schema`: JSON Schema for the final response.
@@ -73,6 +73,13 @@ Agents run on a pluggable backend selected per call: explicit `provider` option,
   the Read/Glob/Grep tools; `workspace-write` **requires `isolation: "worktree"`** (the
   worktree is the write-isolation mechanism) and enables auto-accepted edits plus Bash;
   `danger-full-access` bypasses permissions entirely.
+- **cursor** — runs agents through the official Cursor SDK (`@cursor/sdk`, an optional
+  dependency) in local mode, authenticated via `CURSOR_API_KEY`. The SDK has no system-prompt
+  channel or native structured output, so personas are prepended to the prompt and `schema`
+  is exposed as an in-process `structured_output` custom tool the agent must call. Cursor's
+  sandbox only gates command execution: `read-only` is advisory (sandbox on plus a do-not-write
+  instruction), `workspace-write` requires `isolation: "worktree"` like the claude backend,
+  and `danger-full-access` disables the sandbox. `effort` is ignored.
 
 ### `parallel(thunks, options?)`
 

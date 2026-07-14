@@ -134,7 +134,7 @@ test("router picks backends by provider, model prefix, then default", async () =
 });
 
 test("router rejects an unknown default provider", () => {
-  assert.throws(() => new BackendRouter({ defaultProvider: "cursor" }), /Unknown workflow backend/);
+  assert.throws(() => new BackendRouter({ defaultProvider: "copilot" }), /Unknown workflow backend/);
 });
 
 test("claude backend runs an agent and normalizes the result", async () => {

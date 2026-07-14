@@ -35,8 +35,11 @@
   "engines": {
     "node": ">=22"
   },
+  "optionalDependencies": {
+    "@cursor/sdk": "^1.0.23"
+  },
   "scripts": {
-    "check": "node --check src/server.mjs && node --check src/runtime.mjs && node --check src/app-server-client.mjs && node --check src/backends/index.mjs && node --check src/backends/codex.mjs && node --check src/backends/claude.mjs && node --check src/workflow-worker.mjs && node --check src/workflow-source.mjs && node --check src/semaphore.mjs && node --check src/util.mjs && node --check scripts/smoke.mjs",
+    "check": "node --check src/server.mjs && node --check src/runtime.mjs && node --check src/app-server-client.mjs && node --check src/backends/index.mjs && node --check src/backends/codex.mjs && node --check src/backends/claude.mjs && node --check src/backends/cursor.mjs && node --check src/workflow-worker.mjs && node --check src/workflow-source.mjs && node --check src/semaphore.mjs && node --check src/util.mjs && node --check scripts/smoke.mjs",
     "smoke": "node scripts/smoke.mjs",
     "test": "node --test",
     "viewer": "node scripts/viewer.mjs"

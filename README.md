@@ -107,14 +107,15 @@ MCP-speaking harness can orchestrate wiff workflows. The mental model: **both th
 and the workers are pluggable** — whoever drives, each `agent()` child runs on a backend chosen
 from its model name: `gpt-*`/`o*` models run as native Codex threads via a local
 `codex app-server`, `claude-*`/`opus`/`sonnet`/`haiku`/`fable` models run as headless `claude`
-agents, and a workflow can mix both (`provider: "codex" | "claude"` overrides the inference,
-`WIFF_BACKEND` sets the fallback for unrecognized models). On the Claude backend, `sandbox` is
-enforced by permission policy instead of the OS, so `workspace-write` requires
-`isolation: "worktree"`.
+agents, `composer-*` models run through the official Cursor SDK (`@cursor/sdk`) in-process, and
+a workflow can mix them freely (`provider: "codex" | "claude" | "cursor"` overrides the
+inference, `WIFF_BACKEND` sets the fallback for unrecognized models). On the Claude and Cursor
+backends, `sandbox` is enforced by permission policy instead of the OS, so `workspace-write`
+requires `isolation: "worktree"`.
 
 Requirements on the machine, regardless of harness: Node >= 22, git if you use
-`isolation: "worktree"`, and the CLI of whichever backend your agents use (`codex` and/or
-`claude`), installed and authenticated.
+`isolation: "worktree"`, and the runtime of whichever backend your agents use — the `codex`
+and/or `claude` CLI installed and authenticated, or `CURSOR_API_KEY` for Cursor agents.
 
 **Claude Code** — the plugin install above is the easy path. To wire just the server manually:
 
