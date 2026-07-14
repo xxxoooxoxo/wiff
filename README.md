@@ -1,10 +1,15 @@
 # wiff
 
-**Deterministic, resumable multi-agent workflows for [Codex](https://github.com/openai/codex) — written as plain JavaScript. Like `wf`, but wiff.**
+**Harness-agnostic, deterministic, resumable multi-agent workflows — written as plain JavaScript. Like `wf`, but wiff.**
 
 ![MIT License](https://img.shields.io/badge/license-MIT-blue) ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen) ![Version](https://img.shields.io/badge/version-0.4.0-informational)
 
-Fan a task out to a fleet of Codex agents with a small script instead of a prayer. You write ordinary JavaScript with `agent()`, `parallel()`, and `pipeline()`; the runtime executes it in the background, journals every step, and — when a run dies halfway through — resumes it without re-paying for a single completed agent.
+Fan a task out to a fleet of agents with a small script instead of a prayer. You write ordinary JavaScript with `agent()`, `parallel()`, and `pipeline()`; the runtime executes it in the background, journals every step, and — when a run dies halfway through — resumes it without re-paying for a single completed agent. The engine is a plain MCP server with durable on-disk state, so the same run can be started, watched, resumed, or cancelled from **any** MCP client — Codex, Claude Code, Cursor, or a cron job. (Today the *workers* run on [Codex](https://github.com/openai/codex); [model-agnostic backends](https://github.com/xxxoooxoxo/wiff/issues/1) are on the roadmap.)
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/run-light.png">
+  <img alt="A live wiff run in the viewer: a three-phase accessibility audit with one inventory agent completed and three audit agents running in parallel, each with a live status line, a gantt timeline, and per-agent model/effort/sandbox/token badges." src="docs/screenshots/run-dark.png">
+</picture>
 
 ```js
 export const meta = {
@@ -53,6 +58,10 @@ Ad-hoc multi-agent orchestration ("spawn some subagents for this") is also great
 
 - **Determinism** — the orchestration is a script, not vibes. No time, randomness, filesystem, or network inside workflow code; agents do the external work.
 - **Resume, not retry** — every agent call is journaled with a stable key and an input hash. Kill the host, edit the script, resume the run: unchanged completed agents replay from cache instantly and for free. Agents that were interrupted **mid-turn** re-run with a digest of their previous attempt's transcript injected ("here's what you already did — continue"), and worktree agents inherit their partial checkout instead of starting over.
+
+  <img alt="A resumed run: attempt 2, with the inventory agent and all three audit agents replayed from cache in 0ms and only the interrupted synthesis agent re-running." src="docs/screenshots/resume-dark.png">
+
+  That screenshot is the feature: the host was killed mid-synthesis, and on resume the four finished agents came back from the journal in 0ms — only the interrupted one re-ran.
 - **Fail-hard semantics** — a rejected agent fails the workflow loudly (`parallelSettled()` is the explicit opt-out). No silent `null`s masquerading as success.
 - **Isolation where it matters** — `isolation: "worktree"` gives each writing agent a fresh detached git worktree. Clean ones vanish; dirty ones are kept and listed on the run for you to inspect or merge.
 - **Personas** — `agentType: "reviewer"` injects a markdown persona as the child's developer instructions, with frontmatter defaults for model/effort/sandbox.
@@ -128,6 +137,10 @@ Notes for non-Codex hosts:
 - `workflow_start` requires an explicit absolute `cwd`, so the server's own working directory
   doesn't matter to results.
 
+## For agents
+
+If you are a coding agent — driving wiff over MCP or hacking on this repo — read [AGENTS.md](AGENTS.md). It covers the four workflow tools, the script-authoring rules that actually catch agents out (stable `key`s, thunks not promises, no I/O in workflow code, worktree isolation for concurrent writers), where run state lives on disk, and how to verify changes to the runtime. The full script contract is in [the API reference](plugins/wiff/skills/workflow/references/api.md).
+
 ## How it works
 
 The plugin is an MCP server exposing four tools: `workflow_start`, `workflow_status`, `workflow_wait`, `workflow_cancel`. A started workflow runs its script inside a locked-down Node `vm` (no imports, filesystem, shell, network, time, or randomness — those all throw). Each `agent()` call is dispatched to a shared local `codex app-server`, which runs the child thread with your model/effort/sandbox settings; recursive orchestration is disabled inside children.
@@ -156,6 +169,8 @@ npm run viewer     # http://127.0.0.1:4979  (--port / --root to override)
 ```
 
 Zero dependencies, read-only over the run files, so it can watch runs owned by any process. A live strip across the top shows **every running agent in every run** with what it's doing right now (its latest command, file edit, or thought, tailed from the transcript). Below that: per-phase agent cards with live status lines, a gantt timeline, token counts, kept worktrees, and a click-through live-tailing transcript drawer. Light and dark themes.
+
+<img alt="The transcript drawer open over a completed run, live-tailing one agent's transcript: its final findings report followed by raw token-usage and turn-completion events." src="docs/screenshots/transcript-dark.png">
 
 ## Roadmap
 
