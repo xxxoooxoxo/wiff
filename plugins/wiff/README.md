@@ -8,8 +8,8 @@ runs without re-paying for completed work.
 Run the server (any MCP client):
 
 ```sh
-npx wiff            # stdio MCP server: workflow_start / status / wait / cancel
-npx wiff-viewer     # live web viewer on http://127.0.0.1:4979
+npx @xxxoooxoxo/wiff                      # stdio MCP server: workflow_start / status / wait / cancel
+npx -p @xxxoooxoxo/wiff wiff-viewer       # live web viewer on http://127.0.0.1:4979
 ```
 
 Requires the `codex` CLI installed and authenticated, Node >= 22, and git for

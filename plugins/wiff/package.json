@@ -1,13 +1,13 @@
 {
-  "name": "wiff",
+  "name": "@xxxoooxoxo/wiff",
   "version": "0.4.0",
   "mcpName": "io.github.xxxoooxoxo/wiff",
-  "description": "Deterministic, resumable multi-agent workflows for Codex — a harness-agnostic MCP server that fans work out to Codex agents from plain JavaScript scripts, with journaled resume, git worktree isolation, and personas.",
+  "description": "Deterministic, resumable multi-agent workflows for Codex \u2014 a harness-agnostic MCP server that fans work out to Codex agents from plain JavaScript scripts, with journaled resume, git worktree isolation, and personas.",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/xxxoooxoxo/wiff.git"
+    "url": "git+https://github.com/xxxoooxoxo/wiff.git"
   },
   "homepage": "https://github.com/xxxoooxoxo/wiff#readme",
   "bugs": "https://github.com/xxxoooxoxo/wiff/issues",
@@ -22,8 +22,8 @@
     "git-worktree"
   ],
   "bin": {
-    "wiff": "./src/server.mjs",
-    "wiff-viewer": "./scripts/viewer.mjs"
+    "wiff": "src/server.mjs",
+    "wiff-viewer": "scripts/viewer.mjs"
   },
   "files": [
     "src",
