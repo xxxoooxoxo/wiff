@@ -39,7 +39,17 @@ return await parallel(
 
 ## Why
 
-Ad-hoc multi-agent orchestration ("spawn some subagents for this") is great until the run is 40 agents deep and something dies. Workflows-as-code give you:
+**There is no harness-agnostic workflow orchestration system.** Every coding harness has some
+multi-agent story — Claude Code has its Workflow tool, Codex has subagents, Cursor has its own
+agents — but each one is welded to its harness: its runs live and die with that app, its state is
+invisible to everything else, and none of them can be driven from anywhere but their own chat
+window. wiff pulls orchestration out of the harness: the engine is a plain MCP server with durable
+on-disk state, so **any** MCP client — Codex, Claude Code, Cursor, a cron job — can start, watch,
+resume, or cancel the same runs, and the orchestration itself is a script rather than a
+conversation.
+
+Ad-hoc multi-agent orchestration ("spawn some subagents for this") is also great until the run is
+40 agents deep and something dies. Workflows-as-code give you:
 
 - **Determinism** — the orchestration is a script, not vibes. No time, randomness, filesystem, or network inside workflow code; agents do the external work.
 - **Resume, not retry** — every agent call is journaled with a stable key and an input hash. Kill the host, edit the script, resume the run: unchanged completed agents replay from cache instantly and for free. Agents that were interrupted **mid-turn** re-run with a digest of their previous attempt's transcript injected ("here's what you already did — continue"), and worktree agents inherit their partial checkout instead of starting over.
