@@ -133,6 +133,35 @@ test("router picks backends by provider, model prefix, then default", async () =
   assert.ok(created.every((backend) => backend.closed));
 });
 
+test("router aggregates model listings and captures per-provider failures", async () => {
+  const router = new BackendRouter({
+    defaultProvider: "codex",
+    factories: {
+      codex: () => ({
+        async listModels() {
+          return [{ id: "gpt-5.6-sol", efforts: ["low", "high"], isDefault: true }];
+        },
+      }),
+      claude: () => ({
+        async listModels() {
+          throw new Error("claude CLI not found");
+        },
+      }),
+      bare: () => ({}),
+    },
+  });
+  const backends = await router.listModels();
+  assert.equal(backends.codex.models[0].id, "gpt-5.6-sol");
+  assert.equal(backends.claude.error, "claude CLI not found");
+  assert.deepEqual(backends.bare.models, []);
+});
+
+test("claude backend lists its stable model aliases", async () => {
+  const models = await new ClaudeBackend().listModels();
+  assert.deepEqual(models.map((model) => model.id), ["fable", "opus", "sonnet", "haiku"]);
+  assert.ok(models.every((model) => model.efforts.includes("xhigh")));
+});
+
 test("router rejects an unknown default provider", () => {
   assert.throws(() => new BackendRouter({ defaultProvider: "copilot" }), /Unknown workflow backend/);
 });

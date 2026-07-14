@@ -78,6 +78,17 @@ export class CursorBackend {
     }
   }
 
+  async listModels() {
+    const { Cursor } = await this.#sdk();
+    const models = await Cursor.models.list();
+    return (models ?? []).map((model) => ({
+      id: model.id,
+      displayName: model.displayName,
+      description: model.description,
+      aliases: model.aliases,
+    }));
+  }
+
   async runAgent({ prompt, options, instructions, signal, onEvent }) {
     if (this.#closed) throw new Error("Cursor backend is closed.");
     if (signal?.aborted) throw signal.reason ?? new Error("Agent aborted.");

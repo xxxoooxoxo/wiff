@@ -81,6 +81,17 @@ const tools = [
       additionalProperties: false,
     },
   },
+  {
+    name: "workflow_models",
+    title: "List Workflow Agent Models",
+    description:
+      "List the models each agent backend (codex, claude, cursor) can run, with supported reasoning efforts. Backends that are unavailable on this machine report an error instead of models.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
 ];
 
 const manager = CHILD_MODE ? null : new WorkflowManager();
@@ -118,6 +129,25 @@ function toolResult(run) {
   };
 }
 
+function summarizeModels(backends) {
+  const lines = [];
+  for (const [provider, listing] of Object.entries(backends)) {
+    if (listing.error) {
+      lines.push(`${provider}: unavailable (${listing.error})`);
+      continue;
+    }
+    lines.push(`${provider}:`);
+    for (const model of listing.models) {
+      const details = [
+        model.efforts?.length ? `efforts: ${model.efforts.join("/")}` : null,
+        model.isDefault ? "default" : null,
+      ].filter(Boolean);
+      lines.push(`  ${model.id}${details.length ? ` (${details.join(", ")})` : ""}`);
+    }
+  }
+  return lines.join("\n") || "No backends configured.";
+}
+
 async function callTool(name, args) {
   if (!manager) throw new Error("Workflow tools are disabled inside workflow child agents.");
   if (name === "workflow_start") return toolResult(await manager.start(args ?? {}));
@@ -126,6 +156,13 @@ async function callTool(name, args) {
     return toolResult(await manager.wait(args?.runId, args?.timeoutMs ?? 55_000));
   }
   if (name === "workflow_cancel") return toolResult(await manager.cancel(args?.runId));
+  if (name === "workflow_models") {
+    const backends = await manager.listModels();
+    return {
+      content: [{ type: "text", text: summarizeModels(backends) }],
+      structuredContent: { backends },
+    };
+  }
   throw new Error(`Unknown tool: ${name}`);
 }
 

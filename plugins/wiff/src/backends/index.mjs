@@ -35,6 +35,10 @@ import { CursorBackend } from "./cursor.mjs";
  *   close()       Optional. Tear down long-lived processes and reject
  *                 in-flight turns.
  *
+ *   listModels()  Optional. Resolve to [{ id, displayName?, description?,
+ *                 efforts?, defaultEffort?, isDefault?, note? }] describing
+ *                 the models this backend can run, for discovery/validation.
+ *
  * A backend must not depend on process-global mutable state keyed by run:
  * one instance serves every concurrent workflow of a WorkflowManager.
  */
@@ -116,6 +120,24 @@ export class BackendRouter {
 
   async runAgent(request) {
     return this.backendFor(this.providerFor(request.options)).runAgent(request);
+  }
+
+  // Model catalog per provider: { codex: { models: [...] } | { error }, ... }.
+  // A provider that is unavailable (CLI missing, SDK not installed, no auth)
+  // reports its error instead of failing the whole listing.
+  async listModels() {
+    const providers = Object.keys(this.#factories);
+    const listings = await Promise.all(
+      providers.map(async (provider) => {
+        try {
+          const models = await this.backendFor(provider).listModels?.();
+          return [provider, { models: models ?? [] }];
+        } catch (error) {
+          return [provider, { error: error?.message ?? String(error) }];
+        }
+      }),
+    );
+    return Object.fromEntries(listings);
   }
 
   async close() {

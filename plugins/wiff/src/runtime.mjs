@@ -876,6 +876,11 @@ export class WorkflowManager {
     }
   }
 
+  async listModels() {
+    if (typeof this.backend.listModels !== "function") return {};
+    return this.backend.listModels();
+  }
+
   async status(runId) {
     await this.initialize();
     validateRunId(runId);
