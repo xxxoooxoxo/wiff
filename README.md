@@ -221,6 +221,19 @@ npm run smoke -- wf_<run-id>
 
 Codex runs installed plugins from a versioned cache — after editing source, bump the version in `.codex-plugin/plugin.json` and re-run `codex plugin add wiff@wiff` to pick up changes.
 
+### Releasing
+
+Merging a version bump to `main` automatically publishes the package to npm and then registers the same version with the MCP Registry. Keep the version aligned in:
+
+- `plugins/wiff/package.json`
+- `plugins/wiff/.codex-plugin/plugin.json`
+- `plugins/wiff/.claude-plugin/plugin.json`
+- `server.json` and its npm package entry
+
+The release workflow fails before publishing if those values or the npm/MCP package names disagree. It is safe to re-run: versions that already exist in either registry are skipped.
+
+npm publishing uses a trusted GitHub Actions publisher rather than a long-lived token. The one-time npm configuration for `@xxxoooxoxo/wiff` is repository `xxxoooxoxo/wiff`, workflow `release.yml`, with `npm publish` allowed. The MCP Registry also authenticates with GitHub OIDC and needs no repository secret.
+
 ## License
 
 [MIT](LICENSE)

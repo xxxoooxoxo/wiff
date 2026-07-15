@@ -1,0 +1,172 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release.yml
+      - plugins/wiff/package.json
+      - plugins/wiff/.codex-plugin/plugin.json
+      - plugins/wiff/.claude-plugin/plugin.json
+      - server.json
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  release:
+    name: Publish npm package and MCP server
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Validate release metadata
+        id: metadata
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from "node:fs";
+
+          const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
+          const packageJson = readJson("plugins/wiff/package.json");
+          const codexPlugin = readJson("plugins/wiff/.codex-plugin/plugin.json");
+          const claudePlugin = readJson("plugins/wiff/.claude-plugin/plugin.json");
+          const server = readJson("server.json");
+          const serverPackage = server.packages?.[0];
+
+          if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(packageJson.version)) {
+            throw new Error(`Invalid release version: ${packageJson.version}`);
+          }
+
+          const versions = {
+            "plugins/wiff/package.json": packageJson.version,
+            "plugins/wiff/.codex-plugin/plugin.json": codexPlugin.version,
+            "plugins/wiff/.claude-plugin/plugin.json": claudePlugin.version,
+            "server.json": server.version,
+            "server.json package": serverPackage?.version,
+          };
+
+          for (const [source, version] of Object.entries(versions)) {
+            if (version !== packageJson.version) {
+              throw new Error(`${source} is ${version}; expected ${packageJson.version}`);
+            }
+          }
+
+          if (packageJson.mcpName !== server.name) {
+            throw new Error(`package mcpName ${packageJson.mcpName} does not match ${server.name}`);
+          }
+          if (serverPackage?.identifier !== packageJson.name) {
+            throw new Error(`server package ${serverPackage?.identifier} does not match ${packageJson.name}`);
+          }
+
+          appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            `package_name=${packageJson.name}\nversion=${packageJson.version}\nmcp_name=${server.name}\n`,
+          );
+          NODE
+
+      - name: Run unit tests
+        working-directory: plugins/wiff
+        run: npm test
+
+      - name: Run syntax checks
+        working-directory: plugins/wiff
+        run: npm run check
+
+      - name: Verify package contents
+        working-directory: plugins/wiff
+        run: npm pack --dry-run
+
+      - name: Check npm release
+        id: npm_release
+        shell: bash
+        env:
+          PACKAGE_NAME: ${{ steps.metadata.outputs.package_name }}
+          PACKAGE_VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          set +e
+          output=$(npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version 2>&1)
+          status=$?
+          set -e
+
+          if [[ $status -eq 0 ]]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$output" == *"E404"* ]]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$output" >&2
+            exit "$status"
+          fi
+
+      - name: Publish to npm
+        if: steps.npm_release.outputs.published != 'true'
+        working-directory: plugins/wiff
+        run: npm publish --access public
+
+      - name: Check MCP Registry release
+        id: mcp_release
+        shell: bash
+        env:
+          MCP_NAME: ${{ steps.metadata.outputs.mcp_name }}
+          PACKAGE_VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          mcp_name=$(jq -rn --arg value "$MCP_NAME" '$value | @uri')
+          version=$(jq -rn --arg value "$PACKAGE_VERSION" '$value | @uri')
+          url="https://registry.modelcontextprotocol.io/v0.1/servers/${mcp_name}/versions/${version}"
+          status=$(curl --silent --show-error --output /tmp/mcp-release.json --write-out '%{http_code}' "$url")
+
+          if [[ "$status" == "200" ]]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$status" == "404" ]]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          else
+            cat /tmp/mcp-release.json >&2
+            exit 1
+          fi
+
+      - name: Install MCP Registry publisher
+        if: steps.mcp_release.outputs.published != 'true'
+        shell: bash
+        run: |
+          curl --fail --location --silent --show-error \
+            https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz \
+            | tar xz mcp-publisher
+
+      - name: Authenticate to MCP Registry
+        if: steps.mcp_release.outputs.published != 'true'
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish to MCP Registry
+        if: steps.mcp_release.outputs.published != 'true'
+        run: ./mcp-publisher publish
+
+      - name: Summarize release
+        env:
+          PACKAGE_NAME: ${{ steps.metadata.outputs.package_name }}
+          PACKAGE_VERSION: ${{ steps.metadata.outputs.version }}
+          NPM_ALREADY_PUBLISHED: ${{ steps.npm_release.outputs.published }}
+          MCP_ALREADY_PUBLISHED: ${{ steps.mcp_release.outputs.published }}
+        run: |
+          {
+            echo "### Release ${PACKAGE_VERSION}"
+            echo
+            echo "- npm: $([[ "$NPM_ALREADY_PUBLISHED" == "true" ]] && echo already published || echo published by this run)"
+            echo "- MCP Registry: $([[ "$MCP_ALREADY_PUBLISHED" == "true" ]] && echo already published || echo published by this run)"
+            echo "- package: \`${PACKAGE_NAME}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
