@@ -37,6 +37,25 @@
     --bad-bg: #fff0ed;
     --warn-bg: #fff6e6;
     --cached-bg: #f1f1f3;
+    --vj-bg: var(--surface-2);
+    --vj-bg-panel: var(--surface);
+    --vj-bg-hover: var(--hover);
+    --vj-bg-selected: color-mix(in srgb, var(--running) 13%, var(--surface));
+    --vj-bg-selected-muted: var(--active);
+    --vj-text: var(--ink);
+    --vj-text-dim: var(--ink-2);
+    --vj-text-dimmer: var(--ink-3);
+    --vj-text-muted: var(--ink-3);
+    --vj-text-selected: var(--ink);
+    --vj-border: var(--line-strong);
+    --vj-border-subtle: var(--line);
+    --vj-accent: var(--running);
+    --vj-accent-muted: color-mix(in srgb, var(--running) 18%, transparent);
+    --vj-string: #087a57;
+    --vj-number: #9a5a13;
+    --vj-boolean: #7253b4;
+    --vj-error: var(--bad);
+    --vj-font: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
   }
 
   [data-theme="dark"] {
@@ -68,6 +87,25 @@
     --bad-bg: #3b211d;
     --warn-bg: #392c17;
     --cached-bg: #262629;
+    --vj-bg: var(--surface-2);
+    --vj-bg-panel: var(--node);
+    --vj-bg-hover: var(--hover);
+    --vj-bg-selected: color-mix(in srgb, var(--running) 18%, var(--surface));
+    --vj-bg-selected-muted: var(--active);
+    --vj-text: var(--ink);
+    --vj-text-dim: var(--ink-2);
+    --vj-text-dimmer: var(--ink-3);
+    --vj-text-muted: var(--ink-3);
+    --vj-text-selected: var(--ink);
+    --vj-border: var(--line-strong);
+    --vj-border-subtle: var(--line);
+    --vj-accent: var(--running);
+    --vj-accent-muted: color-mix(in srgb, var(--running) 22%, transparent);
+    --vj-string: #76d6a8;
+    --vj-number: #efbd70;
+    --vj-boolean: #a9bff5;
+    --vj-error: var(--bad);
+    --vj-font: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
     color-scheme: dark;
   }
 
@@ -792,6 +830,15 @@
     white-space: pre-wrap;
     word-break: break-word;
   }
+  .tr-event .vj-tree {
+    max-height: 420px;
+    margin-top: 3px;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 8px 10px;
+    background: var(--surface-2);
+  }
 
   @media (max-width: 900px) {
     .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
@@ -869,6 +916,36 @@ let structureKey = "";
 let agentsIndex = new Map();
 let drawer = null;
 let activeAgents = [];
+let visualJsonPromise = null;
+let visualJsonUnavailable = false;
+let visualJsonRoots = [];
+
+function ensureVisualJson() {
+  if (visualJsonUnavailable) return Promise.resolve(null);
+  if (!visualJsonPromise) {
+    visualJsonPromise = Promise.all([
+      import("https://esm.sh/react@19.2.0"),
+      import("https://esm.sh/react-dom@19.2.0/client?deps=react@19.2.0"),
+      import("https://esm.sh/@visual-json/react@0.4.0?deps=react@19.2.0"),
+    ]).then(([React, ReactDom, VisualJsonModule]) => ({
+      createElement: React.createElement,
+      createRoot: ReactDom.createRoot,
+      VisualJson: VisualJsonModule.VisualJson,
+      TreeView: VisualJsonModule.TreeView,
+    })).catch(() => {
+      visualJsonUnavailable = true;
+      return null;
+    });
+  }
+  return visualJsonPromise;
+}
+
+function unmountVisualJsonRoots() {
+  for (const root of visualJsonRoots) {
+    try { root.unmount(); } catch {}
+  }
+  visualJsonRoots = [];
+}
 
 const savedTheme = localStorage.getItem("cwf-theme");
 if (savedTheme) document.documentElement.dataset.theme = savedTheme;
@@ -1348,24 +1425,96 @@ document.addEventListener("click", (event) => {
 
 async function renderDrawerBody() {
   if (!drawer) return;
+  const drawerState = drawer;
   try {
-    const payload = await fetchJson(`/api/runs/${drawer.runId}/transcripts/${drawer.file}`);
+    const payload = await fetchJson(`/api/runs/${drawerState.runId}/transcripts/${drawerState.file}`);
+    if (drawer !== drawerState) return;
+    const lastEvent = payload.events[payload.events.length - 1];
+    const renderKey = `${payload.size}:${payload.events.length}:${lastEvent?.at ?? ""}`;
+    if (!drawerState.firstLoad && drawerState.renderKey === renderKey) return;
     const body = $("drawer-body");
     const pinned = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
-    body.innerHTML = payload.events.map(({ at, event }) => {
+    const treePayloads = [];
+    const truncateText = (value) => {
+      const text = String(value ?? "");
+      return text.length > 4000 ? `${text.slice(0, 4000)}\n… (truncated)` : text;
+    };
+    const renderPre = (value) => `<pre class="mono">${esc(truncateText(value))}</pre>`;
+    const renderTree = (value, fallbackText) => {
+      const serialized = JSON.stringify(value);
+      if (visualJsonUnavailable || serialized === undefined || serialized.length > 300000) return renderPre(fallbackText);
+      const index = treePayloads.push({ value, fallbackText }) - 1;
+      return `<div class="vj-tree" data-vj="${index}"></div>`;
+    };
+    const html = payload.events.map(({ at, event }) => {
       const item = event?.params?.item;
       let text = "";
-      if (item?.text) text = item.text;
-      else if (item?.summary_text) text = item.summary_text;
-      else if (item?.command) text = `$ ${item.command}`;
-      else if (item || event?.params?.delta) return "";
-      else text = JSON.stringify(event?.params ?? event, null, 2);
-      if (text.length > 4000) text = `${text.slice(0, 4000)}\n… (truncated)`;
-      return `<div class="tr-event"><div class="m mono">${fmtTime(at)} · ${esc(event?.method ?? "")}${item?.type ? ` · ${esc(item.type)}` : ""}</div><pre class="mono">${esc(text)}</pre></div>`;
+      let content = "";
+      if (item?.text || item?.summary_text) {
+        text = item.text || item.summary_text;
+        const trimmed = typeof text === "string" ? text.trim() : "";
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (parsed !== null && typeof parsed === "object") content = renderTree(parsed, text);
+          } catch {}
+        }
+        if (!content) content = renderPre(text);
+      } else if (item?.command) {
+        content = renderPre(`$ ${item.command}`);
+      } else if (item || event?.params?.delta) {
+        return "";
+      } else {
+        const value = event?.params ?? event;
+        text = JSON.stringify(value, null, 2);
+        content = renderTree(value, text);
+      }
+      return `<div class="tr-event"><div class="m mono">${fmtTime(at)} · ${esc(event?.method ?? "")}${item?.type ? ` · ${esc(item.type)}` : ""}</div>${content}</div>`;
     }).join("") || `<div class="empty">No transcript events.</div>`;
-    if (pinned || drawer.firstLoad) body.scrollTop = body.scrollHeight;
-    drawer.firstLoad = false;
+    unmountVisualJsonRoots();
+    body.innerHTML = html;
+    drawerState.renderKey = renderKey;
+    const shouldPin = pinned || drawerState.firstLoad;
+    drawerState.firstLoad = false;
+    if (shouldPin) body.scrollTop = body.scrollHeight;
+
+    if (treePayloads.length) {
+      const visualJson = await ensureVisualJson();
+      if (drawer !== drawerState || drawerState.renderKey !== renderKey) return;
+      for (const [index, treePayload] of treePayloads.entries()) {
+        const placeholder = body.querySelector(`[data-vj="${index}"]`);
+        if (!placeholder) continue;
+        if (!visualJson) {
+          const pre = document.createElement("pre");
+          pre.className = "mono";
+          pre.textContent = truncateText(treePayload.fallbackText);
+          placeholder.replaceWith(pre);
+          continue;
+        }
+        let root;
+        try {
+          root = visualJson.createRoot(placeholder);
+          root.render(visualJson.createElement(
+            visualJson.VisualJson,
+            { value: treePayload.value, onChange: () => {} },
+            visualJson.createElement(visualJson.TreeView, { showValues: true, showCounts: true }),
+          ));
+          visualJsonRoots.push(root);
+        } catch {
+          try { root?.unmount(); } catch {}
+          const pre = document.createElement("pre");
+          pre.className = "mono";
+          pre.textContent = truncateText(treePayload.fallbackText);
+          placeholder.replaceWith(pre);
+        }
+      }
+      if (shouldPin) requestAnimationFrame(() => {
+        if (drawer === drawerState) body.scrollTop = body.scrollHeight;
+      });
+    }
   } catch (error) {
+    if (drawer !== drawerState) return;
+    unmountVisualJsonRoots();
     $("drawer-body").innerHTML = `<div class="empty">${esc(error.message)}</div>`;
   }
 }
@@ -1374,6 +1523,7 @@ function openDrawer(runId, file, label, live, agentKey) {
   drawer = { runId, file, label, live, agentKey, firstLoad: true };
   $("drawer-title").textContent = label;
   $("drawer-live").textContent = live ? "● live tail" : "";
+  unmountVisualJsonRoots();
   $("drawer-body").innerHTML = `<div class="empty">Loading…</div>`;
   $("drawer").classList.add("open");
   $("backdrop").classList.add("open");
@@ -1381,6 +1531,7 @@ function openDrawer(runId, file, label, live, agentKey) {
 }
 
 function closeDrawer() {
+  unmountVisualJsonRoots();
   drawer = null;
   $("drawer").classList.remove("open");
   $("backdrop").classList.remove("open");
