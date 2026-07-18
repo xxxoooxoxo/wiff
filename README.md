@@ -4,7 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/%40xxxoooxoxo%2Fwiff?label=npm&color=cb3837)](https://www.npmjs.com/package/@xxxoooxoxo/wiff) [![MCP Registry](https://img.shields.io/badge/MCP_Registry-io.github.xxxoooxoxo%2Fwiff-6b46c1)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.xxxoooxoxo/wiff) ![MIT License](https://img.shields.io/badge/license-MIT-blue) ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
 
-Fan a task out to a fleet of agents with a small script instead of a prayer. You write ordinary JavaScript with `agent()`, `parallel()`, and `pipeline()`; the runtime executes it in the background, journals every step, and — when a run dies halfway through — resumes it without re-paying for a single completed agent. The engine is a plain MCP server with durable on-disk state, so the same run can be started, watched, resumed, or cancelled from **any** MCP client — Codex, Claude Code, Cursor, or a cron job. (Today the *workers* run on [Codex](https://github.com/openai/codex); [model-agnostic backends](https://github.com/xxxoooxoxo/wiff/issues/1) are on the roadmap.)
+Fan a task out to a fleet of agents with a small script instead of a prayer. You write ordinary JavaScript with `agent()`, `parallel()`, and `pipeline()`; the runtime executes it in the background, journals every step, and — when a run dies halfway through — resumes it without re-paying for a single completed agent. The engine is a plain MCP server with durable on-disk state, so the same run can be started, watched, resumed, or cancelled from **any** MCP client — Codex, Claude Code, Cursor, or a cron job — while each child runs on Codex, Claude, or Cursor.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/run-light.png">
@@ -98,7 +98,7 @@ codex plugin add wiff@wiff
 
 Then start a new Codex session and either invoke the bundled skill with `$workflow` or just ask: *"run this as a resumable workflow."*
 
-Installing the plugin auto-approves its four workflow-controller tools so headless and desktop runs don't stop at an MCP approval prompt. Agent filesystem access is still governed per-call by `sandbox`.
+Installing the plugin auto-approves its five workflow-controller tools so headless and desktop runs don't stop at an MCP approval prompt. Agent filesystem access is still governed per-call by `sandbox`.
 
 ## Using from other harnesses (Claude Code, Cursor, any MCP client)
 
@@ -124,12 +124,13 @@ claude mcp add wiff -- npx -y @xxxoooxoxo/wiff
 ```
 
 Tool calls go through Claude Code's own permission system; to skip per-call prompts, allow the
-four tools in `.claude/settings.json`:
+five tools in `.claude/settings.json`:
 
 ```json
 { "permissions": { "allow": [
   "mcp__wiff__workflow_start", "mcp__wiff__workflow_status",
-  "mcp__wiff__workflow_wait", "mcp__wiff__workflow_cancel"
+  "mcp__wiff__workflow_wait", "mcp__wiff__workflow_cancel",
+  "mcp__wiff__workflow_models"
 ] } }
 ```
 
@@ -161,11 +162,11 @@ Notes for non-Codex hosts:
 
 ## For agents
 
-If you are a coding agent — driving wiff over MCP or hacking on this repo — read [AGENTS.md](AGENTS.md). It covers the four workflow tools, the script-authoring rules that actually catch agents out (stable `key`s, thunks not promises, no I/O in workflow code, worktree isolation for concurrent writers), where run state lives on disk, and how to verify changes to the runtime. The full script contract is in [the API reference](plugins/wiff/skills/workflow/references/api.md).
+If you are a coding agent — driving wiff over MCP or hacking on this repo — read [AGENTS.md](AGENTS.md). It covers the five workflow tools, the script-authoring rules that actually catch agents out (stable `key`s, thunks not promises, no I/O in workflow code, worktree isolation for concurrent writers), where run state lives on disk, and how to verify changes to the runtime. The full script contract is in [the API reference](plugins/wiff/skills/workflow/references/api.md).
 
 ## How it works
 
-The plugin is an MCP server exposing four tools: `workflow_start`, `workflow_status`, `workflow_wait`, `workflow_cancel`. A started workflow runs its script inside a locked-down Node `vm` (no imports, filesystem, shell, network, time, or randomness — those all throw). Each `agent()` call is dispatched to a shared local `codex app-server`, which runs the child thread with your model/effort/sandbox settings; recursive orchestration is disabled inside children.
+The plugin is an MCP server exposing five tools: `workflow_start`, `workflow_status`, `workflow_wait`, `workflow_cancel`, and `workflow_models`. A started workflow runs its script inside a locked-down Node `vm` (no imports, filesystem, shell, network, time, or randomness — those all throw). Each `agent()` call is routed to the Codex, Claude, or Cursor backend from its model name or explicit `provider`; recursive orchestration is disabled inside children.
 
 Everything about a run persists under `~/.wiff/runs/<runId>/`:
 
@@ -177,7 +178,7 @@ agents/*.jsonl   full per-child transcripts
 worktrees/       isolated checkouts for agents that asked for them
 ```
 
-Status, waits, cancellation, and resume all work across host restarts — a second Codex session can observe, cancel, or resume a run it didn't start.
+Status, waits, cancellation, and resume all work across host restarts — another MCP client or session can observe, cancel, or resume a run it didn't start.
 
 See [the API reference](plugins/wiff/skills/workflow/references/api.md) for the full script contract and [`examples/verify-and-fix.js`](plugins/wiff/examples/verify-and-fix.js) for a staged example.
 
@@ -193,10 +194,6 @@ npx -p @xxxoooxoxo/wiff wiff-viewer    # http://127.0.0.1:4979  (--port / --root
 Zero dependencies, read-only over the run files, so it can watch runs owned by any process. A live strip across the top shows **every running agent in every run** with what it's doing right now (its latest command, file edit, or thought, tailed from the transcript). Below that: per-phase agent cards with live status lines, a gantt timeline, token counts, kept worktrees, and a click-through live-tailing transcript drawer. Light and dark themes.
 
 <img alt="The transcript drawer open over a completed run, live-tailing one agent's transcript: its final findings report followed by raw token-usage and turn-completion events." src="docs/screenshots/transcript-dark.png">
-
-## Roadmap
-
-- [Model-agnostic backends](https://github.com/xxxoooxoxo/wiff/issues/1) — run individual agents on Claude or Gemini alongside Codex, routed by model name.
 
 ## Related projects
 

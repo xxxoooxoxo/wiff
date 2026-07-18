@@ -10,7 +10,7 @@ completed work.
 Run the server (any MCP client):
 
 ```sh
-npx @xxxoooxoxo/wiff                      # stdio MCP server: workflow_start / status / wait / cancel
+npx @xxxoooxoxo/wiff                      # stdio MCP server: start / status / wait / cancel / models
 npx -p @xxxoooxoxo/wiff wiff-viewer       # live web viewer on http://127.0.0.1:4979
 ```
 

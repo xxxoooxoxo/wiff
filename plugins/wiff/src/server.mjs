@@ -4,13 +4,13 @@ import { WorkflowManager } from "./runtime.mjs";
 import { serializeError } from "./util.mjs";
 
 const SERVER_NAME = "wiff";
-const SERVER_VERSION = "0.4.0";
+const SERVER_VERSION = "0.5.0";
 const CHILD_MODE = process.env.CODEX_WORKFLOW_CHILD === "1";
 
 const tools = [
   {
     name: "workflow_start",
-    title: "Start or Resume a Codex Workflow",
+    title: "Start or Resume an Agent Workflow",
     description:
       "Launch a deterministic JavaScript workflow in the background, or resume a previous run without repeating successful unchanged agent calls. Always pass the caller's absolute working directory as cwd.",
     inputSchema: {
@@ -41,7 +41,7 @@ const tools = [
   },
   {
     name: "workflow_status",
-    title: "Read Codex Workflow Status",
+    title: "Read Agent Workflow Status",
     description: "Read the latest persisted status, phase, counters, result, and artifact paths for a workflow run.",
     inputSchema: {
       type: "object",
@@ -52,7 +52,7 @@ const tools = [
   },
   {
     name: "workflow_wait",
-    title: "Wait for Codex Workflow Progress",
+    title: "Wait for Agent Workflow Progress",
     description:
       "Wait until a workflow changes state or the timeout elapses. Call repeatedly until the run is completed, failed, cancelled, or interrupted.",
     inputSchema: {
@@ -72,7 +72,7 @@ const tools = [
   },
   {
     name: "workflow_cancel",
-    title: "Cancel a Codex Workflow",
+    title: "Cancel an Agent Workflow",
     description: "Interrupt all live agents and mark a workflow run cancelled.",
     inputSchema: {
       type: "object",

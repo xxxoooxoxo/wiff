@@ -4,7 +4,7 @@ Instructions for coding agents. Two audiences: agents **orchestrating with wiff*
 
 ## Orchestrating with wiff (driving it from a harness)
 
-wiff is an MCP server exposing four tools: `workflow_start`, `workflow_status`, `workflow_wait`, `workflow_cancel`. You author a workflow as a plain JavaScript script and pass it to `workflow_start` with an absolute `cwd`; the run executes in the background and everything persists under `~/.wiff/runs/<runId>/`.
+wiff is an MCP server exposing five tools: `workflow_start`, `workflow_status`, `workflow_wait`, `workflow_cancel`, and `workflow_models`. You author a workflow as a plain JavaScript script and pass it to `workflow_start` with an absolute `cwd`; the run executes in the background and everything persists under `~/.wiff/runs/<runId>/`.
 
 **Before authoring a script, read [`plugins/wiff/skills/workflow/references/api.md`](plugins/wiff/skills/workflow/references/api.md) — it is the full script contract.** Inside Codex the bundled `$workflow` skill loads it for you; from any other harness, read it (or copy the skill into your harness's skills directory).
 

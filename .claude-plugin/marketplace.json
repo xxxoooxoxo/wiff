@@ -8,7 +8,7 @@
     {
       "name": "wiff",
       "source": "./plugins/wiff",
-      "description": "Deterministic, resumable multi-agent workflows: fan work out to Codex agents from JavaScript scripts, with journaled resume, worktree isolation, and personas.",
+      "description": "Deterministic, resumable JavaScript workflows across Codex, Claude, and Cursor agents, with journaled resume and worktree isolation.",
       "category": "workflow"
     }
   ]

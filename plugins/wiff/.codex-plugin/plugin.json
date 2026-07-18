@@ -1,7 +1,7 @@
 {
   "name": "wiff",
-  "version": "0.4.0",
-  "description": "Run deterministic, resumable JavaScript workflows that orchestrate Codex agents.",
+  "version": "0.5.0",
+  "description": "Run deterministic, resumable JavaScript workflows across Codex, Claude, and Cursor agents.",
   "author": {
     "name": "Ali Hsareini"
   },
@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "wiff",
     "shortDescription": "Deterministic, resumable agent orchestration",
-    "longDescription": "Write ordinary JavaScript that runs Codex agents in parallel or as pipelines, persists results, and resumes without repeating successful work.",
+    "longDescription": "Write ordinary JavaScript that runs Codex, Claude, or Cursor agents in parallel or as pipelines, persists results, and resumes without repeating successful work.",
     "developerName": "Ali Hsareini",
     "category": "Engineering",
     "capabilities": [
@@ -26,7 +26,7 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Turn this task into a resumable Codex workflow",
+      "Turn this task into a resumable multi-agent workflow",
       "Run independent reviewers in parallel and synthesize their findings",
       "Resume the last failed workflow without repeating successful agents"
     ]
