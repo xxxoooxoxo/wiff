@@ -565,7 +565,13 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-  .node-tags { display: none; }
+  .node-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding-inline: 10px 4px;
+    margin-top: 6px;
+  }
   .node-tag {
     flex: none;
     border-radius: 6px;
@@ -575,6 +581,7 @@
     font-size: 9.5px;
     white-space: nowrap;
   }
+  .node-tag.effort { color: var(--running); background: var(--running-bg); font-weight: 600; }
   .node-tag.worktree { color: var(--warn); background: var(--warn-bg); }
   .node-activity {
     display: block;
@@ -769,6 +776,7 @@
     white-space: nowrap;
   }
   .drawer-header .spacer { flex: 1; }
+  .drawer-meta { flex: none; color: var(--ink-3); font-size: 11px; white-space: nowrap; }
   .drawer-live { color: var(--running); font-size: 11px; }
   .drawer-close {
     position: relative;
@@ -854,6 +862,7 @@
 <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
   <header class="drawer-header">
     <h1 id="drawer-title" class="mono"></h1>
+    <span class="drawer-meta mono" id="drawer-meta"></span>
     <span class="spacer"></span>
     <span class="drawer-live" id="drawer-live"></span>
     <button class="drawer-close" id="drawer-close" type="button" aria-label="Close transcript">✕ close</button>
@@ -1070,9 +1079,9 @@ function agentDisplay(agent) {
 
 function agentNode(agent) {
   const tags = [
-    agent.options.effort,
-    agent.options.sandbox,
-    agent.worktreePath ? `worktree${agent.worktreeKept ? " · kept" : ""}` : null,
+    agent.options.effort ? { text: agent.options.effort, kind: "effort" } : null,
+    agent.options.sandbox ? { text: agent.options.sandbox, kind: "" } : null,
+    agent.worktreePath ? { text: `worktree${agent.worktreeKept ? " · kept" : ""}`, kind: "worktree" } : null,
   ].filter(Boolean);
   return `<button class="agent-node ${esc(agent.status)}" type="button"
       data-node="${esc(agent.key)}" data-status="${esc(agent.status)}" data-card="${esc(agent.key)}"
@@ -1088,7 +1097,7 @@ function agentNode(agent) {
       <span class="node-owner-label">${esc(agentDisplay(agent))}</span>
       <span class="node-duration" data-dur></span>
     </span>
-    ${tags.length ? `<span class="node-tags">${tags.map((tag) => `<span class="node-tag ${String(tag).startsWith("worktree") ? "worktree" : ""}">${esc(tag)}</span>`).join("")}</span>` : ""}
+    ${tags.length ? `<span class="node-tags">${tags.map((tag) => `<span class="node-tag ${tag.kind}">${esc(tag.text)}</span>`).join("")}</span>` : ""}
     <span class="node-activity" data-now></span>
     ${agent.error ? `<span class="node-error" title="${esc(agent.error)}">${esc(agent.error)}</span>` : ""}
   </button>`;
@@ -1373,6 +1382,10 @@ async function renderDrawerBody() {
 function openDrawer(runId, file, label, live, agentKey) {
   drawer = { runId, file, label, live, agentKey, firstLoad: true };
   $("drawer-title").textContent = label;
+  const options = agentsIndex.get(agentKey)?.options ?? {};
+  $("drawer-meta").textContent = [options.agentType ? `@${options.agentType}` : options.model, options.effort]
+    .filter(Boolean)
+    .join(" · ");
   $("drawer-live").textContent = live ? "● live tail" : "";
   $("drawer-body").innerHTML = `<div class="empty">Loading…</div>`;
   $("drawer").classList.add("open");
