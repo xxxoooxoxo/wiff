@@ -3,126 +3,281 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="Live workflow graph for local Wiff runs." />
 <title>wiff</title>
 <link rel="preconnect" href="https://rsms.me/" />
 <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
 <style>
-  /* Semantic tokens, coss-style: zinc neutrals, opacity borders, status colors reserved.
-     Variable names kept from the original structure (--surface/--ink/--line) since
-     inline styles in the JS reference them. */
   :root {
-    --surface: #ffffff;                    /* page + cards */
-    --surface-2: #fafafa;                  /* wells / recessed content */
-    --surface-3: rgb(9 9 11 / 0.06);       /* badges, tracks, soft fills */
-    --ink: #18181b;
-    --ink-2: #71717a;                      /* muted foreground */
-    --ink-3: #a1a1aa;                      /* faint foreground */
-    --line: rgb(9 9 11 / 0.08);
-    --line-strong: rgb(9 9 11 / 0.15);
-    --hover: rgb(9 9 11 / 0.04);
-    --active: rgb(9 9 11 / 0.06);
-    --overlay: rgb(0 0 0 / 0.32);
-    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.05);
-    --shadow-sheet: -16px 0 48px rgb(0 0 0 / 0.12);
-    --running: #2f6bd8; --good: #0ca30c; --bad: #d94f2a; --warn: #b97a00; --cached: #71717a;
-    --running-bg: #eef3fc; --good-bg: #eaf6ea; --bad-bg: #fceee8; --warn-bg: #faf2dc; --cached-bg: #f0f0f1;
+    --surface: #fffefd;
+    --surface-2: #f8f6f4;
+    --surface-3: rgb(39 39 42 / 0.06);
+    --canvas: #f5f1ee;
+    --node: #ffffff;
+    --ink: #202024;
+    --ink-2: #62626b;
+    --ink-3: #787880;
+    --line: rgb(39 39 42 / 0.08);
+    --line-strong: rgb(39 39 42 / 0.15);
+    --edge: #dedbd8;
+    --hover: rgb(39 39 42 / 0.04);
+    --active: rgb(39 39 42 / 0.065);
+    --overlay: rgb(24 24 27 / 0.28);
+    --shadow-xs: 0 1px 2px rgb(24 24 27 / 0.05), 0 4px 18px rgb(24 24 27 / 0.035);
+    --shadow-card: 0 20px 60px rgb(75 60 48 / 0.08), 0 2px 8px rgb(75 60 48 / 0.035);
+    --shadow-sheet: -16px 0 48px rgb(24 24 27 / 0.12);
+    --running: #2f6bd8;
+    --good: #16a663;
+    --bad: #df5a43;
+    --warn: #bd7b15;
+    --cached: #7c7c86;
+    --pending: #b8b8bf;
+    --running-bg: #edf3ff;
+    --good-bg: #ebf8f1;
+    --bad-bg: #fff0ed;
+    --warn-bg: #fff6e6;
+    --cached-bg: #f1f1f3;
   }
+
   [data-theme="dark"] {
-    --surface: #09090b;
-    --surface-2: #111113;
+    --surface: #101011;
+    --surface-2: #151516;
     --surface-3: rgb(255 255 255 / 0.08);
+    --canvas: #0b0b0c;
+    --node: #19191b;
     --ink: #fafafa;
-    --ink-2: #a1a1aa;
-    --ink-3: #70707b;
-    --line: rgb(255 255 255 / 0.09);
+    --ink-2: #b2b2bb;
+    --ink-3: #92929c;
+    --line: rgb(255 255 255 / 0.085);
     --line-strong: rgb(255 255 255 / 0.16);
+    --edge: #343438;
     --hover: rgb(255 255 255 / 0.05);
     --active: rgb(255 255 255 / 0.08);
-    --overlay: rgb(0 0 0 / 0.55);
-    --shadow-xs: none;
-    --shadow-sheet: none;
-    --running: #6f9ff0; --good: #4fc24f; --bad: #ec835a; --warn: #fab219; --cached: #8b8b94;
-    --running-bg: #1c2a45; --good-bg: #162d16; --bad-bg: #3a2115; --warn-bg: #382e12; --cached-bg: #222225;
+    --overlay: rgb(0 0 0 / 0.58);
+    --shadow-xs: 0 1px 0 rgb(255 255 255 / 0.03);
+    --shadow-card: 0 24px 70px rgb(0 0 0 / 0.3);
+    --shadow-sheet: -16px 0 48px rgb(0 0 0 / 0.32);
+    --running: #74a2f2;
+    --good: #52c78a;
+    --bad: #f28c75;
+    --warn: #e8ad51;
+    --cached: #9898a1;
+    --pending: #5c5c64;
+    --running-bg: #1b2942;
+    --good-bg: #163126;
+    --bad-bg: #3b211d;
+    --warn-bg: #392c17;
+    --cached-bg: #262629;
     color-scheme: dark;
   }
 
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; }
   body {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+    background: var(--canvas);
+    color: var(--ink);
     font-family: InterVariable, Inter, ui-sans-serif, system-ui, sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-    font-size: 13px; line-height: 1.5;
-    background: var(--surface); color: var(--ink);
-    display: grid; grid-template-rows: auto 1fr; overflow: hidden;
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
-  code, .mono, kbd { font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace; font-size: 12px; }
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
 
-  header {
-    display: flex; align-items: center; gap: 12px; padding: 9px 16px;
-    border-bottom: 1px solid var(--line); background: var(--surface);
-  }
-  header h1 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
-  header .root { color: var(--ink-3); font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  header .spacer { flex: 1; }
-  button {
-    font: inherit; color: var(--ink-2); background: none; border: none;
-    border-radius: 8px; padding: 5px 10px; cursor: pointer; text-align: left;
-  }
-  button:hover { background: var(--hover); }
-  #tick { color: var(--running); font-weight: 500; flex: none; }
-
-  /* Sidebar section headers + live agent lines under running runs */
-  .side-h {
+  button { font: inherit; }
+  code, .mono, kbd {
     font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
-    font-size: 10px; text-transform: uppercase; letter-spacing: .08em; font-weight: 500;
-    color: var(--ink-3); padding: 10px 10px 4px;
+    font-size: 12px;
   }
-  .run-item .live {
-    display: flex; align-items: center; gap: 6px; margin-top: 5px; padding-left: 14px;
-    color: var(--ink-2); font-size: 11px; overflow: hidden; white-space: nowrap;
-  }
-  .run-item .live .dot { width: 5px; height: 5px; }
-  .run-item .live > span:nth-child(2) { font-weight: 500; flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; }
-  .run-item .live .doing {
-    color: var(--ink-3); overflow: hidden; text-overflow: ellipsis;
-    font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace; font-size: 10px;
-  }
-
-  .layout { display: grid; grid-template-columns: 300px 1fr; min-height: 0; }
-  aside { border-right: 1px solid var(--line); overflow-y: auto; padding: 8px; }
-  main { overflow-y: auto; padding: 20px 24px 64px; container-type: inline-size; }
-  @media (max-width: 860px) {
-    .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-    aside { border-right: none; border-bottom: 1px solid var(--line); display: flex; align-items: flex-start; gap: 4px; overflow-x: auto; overflow-y: hidden; padding: 8px 12px; }
-    aside .side-h { flex: none; padding: 10px 4px 4px; }
-    aside .run-item { min-width: 230px; flex: none; margin-bottom: 0; }
-    main { padding: 16px 16px 48px; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
+  .app-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 54px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    backdrop-filter: blur(18px);
+    position: relative;
+    z-index: 5;
+  }
+  .app-brand { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+  .app-brand-mark {
+    display: grid;
+    place-items: center;
+    width: 23px;
+    height: 23px;
+    border: 2px solid #efbd3d;
+    border-radius: 7px;
+    color: #efbd3d;
+    font-size: 12px;
+    font-weight: 700;
+    transform: rotate(30deg);
+  }
+  .app-brand-mark > span { transform: rotate(-30deg); }
+  .app-header h1 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+  .app-header .root {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ink-3);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .app-header .spacer { flex: 1; }
+  #tick { color: var(--running); font-weight: 500; flex: none; }
+  .header-button {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 32px;
+    border: 0;
+    border-radius: 9px;
+    padding: 5px 9px;
+    background: transparent;
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .header-button:hover { background: var(--hover); }
+  .header-button:focus-visible,
+  .run-item:focus-visible,
+  .agent-node:focus-visible,
+  .flow-focus:focus-visible,
+  .drawer-close:focus-visible {
+    outline: 2px solid var(--running);
+    outline-offset: 2px;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 286px minmax(0, 1fr);
+    min-height: 0;
+  }
+  .runs-sidebar {
+    min-width: 0;
+    overflow-y: auto;
+    border-right: 1px solid var(--line);
+    background: var(--surface);
+    padding: 10px 8px 24px;
+  }
+  .main-view {
+    isolation: isolate;
+    min-width: 0;
+    overflow-y: auto;
+    background:
+      radial-gradient(circle at 78% -20%, color-mix(in srgb, #f3c7aa 17%, transparent), transparent 42%),
+      var(--canvas);
+    padding: clamp(16px, 2.5vw, 34px);
+  }
+
+  .side-h {
+    padding: 11px 10px 5px;
+    color: var(--ink-3);
+    font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
   .run-item {
-    display: block; width: 100%;
-    padding: 8px 10px; border-radius: 8px; margin-bottom: 1px;
+    width: 100%;
+    border: 0;
+    border-radius: 10px;
+    padding: 9px 10px;
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+    text-align: left;
   }
+  .run-item + .run-item { margin-top: 1px; }
   .run-item:hover { background: var(--hover); }
   .run-item.selected { background: var(--active); }
-  .run-item .name { font-weight: 500; display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .run-item .sub { color: var(--ink-3); font-size: 11px; margin-top: 2px; display: flex; align-items: center; gap: 6px; padding-left: 14px; }
+  .run-item .name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .run-item .sub {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-left: 15px;
+    margin-top: 3px;
+    color: var(--ink-3);
+    font-size: 11px;
+  }
+  .run-item .live {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding-left: 15px;
+    margin-top: 6px;
+    color: var(--ink-2);
+    font-size: 11px;
+  }
+  .run-item .live > span:nth-child(2) {
+    flex: none;
+    max-width: 44%;
+    overflow: hidden;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .run-item .doing {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ink-3);
+    font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
   .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
   .dot.running { background: var(--running); animation: pulse 1.4s ease-in-out infinite; }
   .dot.completed { background: var(--good); }
   .dot.failed { background: var(--bad); }
+  .dot.cached { background: var(--cached); }
   .dot.cancelled, .dot.interrupted { background: var(--warn); }
+  .dot.pending { border: 1px solid var(--pending); background: transparent; }
+  .run-item .live .dot { width: 5px; height: 5px; }
   @keyframes pulse { 50% { opacity: .35; } }
 
   .pill {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 1px 8px 1px 6px; border-radius: 999px;
-    font-size: 11px; font-weight: 500; line-height: 1.6;
-    flex: none; white-space: nowrap; /* never squish or wrap — the label truncates instead */
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: none;
+    border-radius: 999px;
+    padding: 1px 8px 1px 6px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.6;
+    white-space: nowrap;
   }
   .pill.running { color: var(--running); background: var(--running-bg); }
   .pill.completed { color: var(--good); background: var(--good-bg); }
@@ -130,149 +285,578 @@
   .pill.cancelled, .pill.interrupted { color: var(--warn); background: var(--warn-bg); }
   .pill.cached { color: var(--cached); background: var(--cached-bg); }
 
-  .run-head h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; text-wrap: balance; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .run-head .desc { color: var(--ink-2); margin-top: 4px; max-width: 72ch; text-wrap: pretty; }
-  .run-head .meta { display: flex; gap: 6px 18px; flex-wrap: wrap; color: var(--ink-3); font-size: 11px; margin-top: 10px; }
-  .run-head .meta b { color: var(--ink-2); font-weight: 500; }
+  .workflow-shell { width: min(100%, 1500px); margin-inline: auto; }
+  .workflow-card {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+  }
+  .workflow-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 70px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .workflow-symbol {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 25px;
+    height: 25px;
+    border: 3px solid #efbd3d;
+    border-radius: 8px;
+    color: #efbd3d;
+    font-size: 11px;
+    font-weight: 700;
+    transform: rotate(30deg);
+  }
+  .workflow-symbol > span { transform: rotate(-30deg); }
+  .workflow-heading { min-width: 0; flex: 1; }
+  .workflow-heading h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  .workflow-heading h2 .title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .workflow-heading .description {
+    max-width: 70ch;
+    margin-top: 2px;
+    overflow: hidden;
+    color: var(--ink-2);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .workflow-number { color: var(--ink-3); font-weight: 400; }
+  .workflow-owner {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    flex: none;
+    color: var(--ink-2);
+  }
+  .creator-label { color: var(--ink-3); }
+  .creator-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #ffe4a4, #ffb671 62%, #ff8f72);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.5);
+  }
+  .workflow-error {
+    border-bottom: 1px solid color-mix(in srgb, var(--bad) 18%, transparent);
+    padding: 9px 20px;
+    background: var(--bad-bg);
+    color: var(--bad);
+    word-break: break-word;
+  }
 
-  /* Stats: divider-separated row, not boxes */
-  .counters { display: flex; flex-wrap: wrap; row-gap: 10px; margin: 18px 0 2px; }
-  .counter { padding: 2px 20px; border-left: 1px solid var(--line); min-width: 0; }
-  .counter:first-child { padding-left: 0; border-left: none; }
-  .counter .n { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
-  .counter .l { font-size: 11px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .flow-viewport {
+    position: relative;
+    min-height: 440px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    background-color: var(--surface-2);
+    background-image: radial-gradient(circle, color-mix(in srgb, var(--ink-3) 25%, transparent) 1px, transparent 1px);
+    background-position: 0 0;
+    background-size: 22px 22px;
+  }
+  .flow-stage {
+    position: relative;
+    width: max(100%, var(--stage-width));
+    min-height: 440px;
+    padding: 30px 42px 70px;
+  }
+  .flow-edges {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow: visible;
+    pointer-events: none;
+  }
+  .flow-edge {
+    fill: none;
+    stroke: var(--edge);
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+  .flow-edge.completed { stroke: color-mix(in srgb, var(--good) 32%, var(--edge)); }
+  .flow-edge.failed { stroke: color-mix(in srgb, var(--bad) 42%, var(--edge)); }
+  .flow-edge.cached { stroke: color-mix(in srgb, var(--cached) 45%, var(--edge)); }
+  .flow-edge.running {
+    stroke: color-mix(in srgb, var(--running) 62%, var(--edge));
+    stroke-dasharray: 7 7;
+    animation: edge-flow 1.2s linear infinite;
+  }
+  @keyframes edge-flow { to { stroke-dashoffset: -14; } }
 
-  section { margin-top: 26px; }
-  section > h3 {
+  .flow-grid {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: repeat(var(--phase-count), minmax(210px, 1fr));
+    align-items: start;
+    gap: 74px;
+  }
+  .phase-column { min-width: 0; }
+  .phase-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 24px;
+    margin-bottom: 18px;
+    color: var(--ink-2);
+    font-size: 11px;
+  }
+  .phase-index {
+    color: var(--ink-3);
     font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
-    font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
-    color: var(--ink-3); margin-bottom: 10px; font-weight: 500;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
   }
-
-  /* Timeline (well) */
-  .timeline { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface-2); }
-  .tl-row { display: grid; grid-template-columns: 200px 1fr 118px; align-items: center; gap: 12px; padding: 3px 0; }
-  .tl-row .tl-label { padding-left: 14px; }
-  .tl-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-size: 12px; }
-  .tl-track { position: relative; height: 12px; background: var(--surface-3); border-radius: 4px; }
-  .tl-bar { position: absolute; top: 2px; bottom: 2px; border-radius: 4px; min-width: 6px; }
-  .tl-bar.running { background: var(--running); animation: pulse 1.4s ease-in-out infinite; }
-  .tl-bar.completed { background: var(--good); }
-  .tl-bar.failed { background: var(--bad); }
-  .tl-bar.cached { background: var(--cached); }
-  .tl-dur { color: var(--ink-3); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .tl-phase {
-    display: grid; grid-template-columns: 200px 1fr 118px; gap: 12px; align-items: center;
-    padding: 9px 0 3px; margin-top: 7px; border-top: 1px dashed var(--line-strong);
+  .phase-name {
+    min-width: 0;
+    overflow: hidden;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .tl-phase:first-child { border-top: none; margin-top: 0; padding-top: 2px; }
-  .tl-phase .name {
-    font-weight: 600; font-size: 12px; display: flex; gap: 7px; align-items: center;
-    overflow: hidden; white-space: nowrap;
-  }
-  .tl-phase-track { position: relative; height: 6px; }
-  .tl-phase-bar {
-    position: absolute; top: 0; bottom: 0; border-radius: 3px;
-    background: var(--surface-3); outline: 1px solid var(--line-strong); min-width: 4px;
-  }
-  @container (max-width: 640px) {
-    .tl-row, .tl-phase { grid-template-columns: 120px 1fr 90px; }
-  }
-  .mode-badge {
-    font-size: 10px; padding: 1px 8px; border-radius: 999px; font-weight: 500; flex: none;
-    letter-spacing: .02em;
-  }
-  .mode-badge.parallel { color: var(--running); background: var(--running-bg); }
-  .mode-badge.series { color: var(--ink-2); background: var(--surface-3); }
-  .tl-axis { display: flex; justify-content: space-between; color: var(--ink-3); font-size: 10px; margin-top: 8px; font-variant-numeric: tabular-nums; }
-  .legend { display: flex; gap: 14px; margin-top: 10px; color: var(--ink-2); font-size: 11px; flex-wrap: wrap; }
-  .legend span { display: inline-flex; align-items: center; gap: 5px; }
-  .swatch { width: 9px; height: 9px; border-radius: 3px; }
-
-  /* Agent cards (clickable → cards are justified) */
-  .phase-title { font-weight: 600; margin: 16px 0 8px; display: flex; gap: 8px; align-items: center; }
-  .phase-title small { color: var(--ink-3); font-weight: 400; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; }
-  @container (max-width: 420px) { .cards { grid-template-columns: 1fr; } }
-  .card {
-    border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
-    background: var(--surface); box-shadow: var(--shadow-xs); width: 100%;
-  }
-  .card:hover { background: var(--hover); }
-  [data-theme="dark"] .card { border-color: var(--line-strong); }
-  .card .top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
-  .card .label { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .card .badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 7px; }
-  .badge {
-    font-size: 10.5px; color: var(--ink-2); background: var(--surface-3);
-    border-radius: 5px; padding: 1.5px 7px; white-space: nowrap;
-  }
-  .badge.wt { color: var(--warn); background: var(--warn-bg); }
-  .card .now {
-    margin-top: 8px; color: var(--ink-2); font-size: 11px;
+  .phase-count { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .phase-mode {
+    flex: none;
+    border-radius: 999px;
+    padding: 1px 6px;
+    background: var(--surface-3);
+    color: var(--ink-3);
     font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 9px;
   }
-  .card .now:empty { display: none; }
-  .card .err { color: var(--bad); font-size: 11px; margin-top: 7px; word-break: break-word; }
+  .phase-hub {
+    width: 8px;
+    height: 8px;
+    margin: 0 auto;
+    border: 2px solid var(--pending);
+    border-radius: 50%;
+    background: var(--surface-2);
+  }
+  .phase-nodes { display: grid; min-width: 0; gap: 22px; }
+  .phase-empty {
+    max-width: 260px;
+    border: 1px dashed var(--line-strong);
+    border-radius: 14px;
+    padding: 18px 14px;
+    color: var(--ink-3);
+    text-align: center;
+  }
 
-  .feed { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface-2); }
-  .feed div { padding: 6px 14px; display: flex; gap: 12px; min-width: 0; }
-  .feed div + div { border-top: 1px solid var(--line); }
-  .feed .t { color: var(--ink-3); font-variant-numeric: tabular-nums; flex: none; }
+  .agent-node {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    max-width: 260px;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+    text-align: left;
+  }
+  .agent-node:disabled { cursor: default; opacity: 1; }
+  .agent-node-main {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    border-radius: 14px;
+    padding: 9px 12px;
+    background: var(--node);
+    box-shadow: var(--shadow-xs), 0 0 0 1px var(--line);
+  }
+  .agent-node:hover .agent-node-main { background: color-mix(in srgb, var(--node) 96%, var(--ink)); }
+  .agent-node:disabled:hover .agent-node-main { background: var(--node); }
+  .agent-node.running .agent-node-main { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 36%, var(--line)); }
+  .agent-node.failed .agent-node-main { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--bad) 38%, var(--line)); }
+  .node-status {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 19px;
+    height: 19px;
+    border: 2px solid var(--pending);
+    border-radius: 50%;
+    color: var(--pending);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .node-status.completed { border-color: var(--good); background: var(--good); color: #fff; }
+  .node-status.failed { border-color: var(--bad); background: var(--bad); color: #fff; }
+  .node-status.cached { border-color: var(--cached); color: var(--cached); }
+  .node-status.running {
+    border-color: var(--running);
+    color: var(--running);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  .node-label {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 14px;
+    font-weight: 550;
+    letter-spacing: -0.01em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .node-multiplier {
+    flex: none;
+    border-radius: 8px;
+    padding: 1px 6px;
+    background: var(--surface-3);
+    color: var(--ink-2);
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .agent-node-owner {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    padding-inline: 10px 4px;
+    margin-top: 8px;
+    color: var(--ink-2);
+    font-size: 11px;
+  }
+  .agent-orb {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    box-shadow: inset -3px -3px 5px rgb(255 255 255 / 0.32);
+  }
+  .tone-0 { background: linear-gradient(145deg, #70ead7, #28bda4); }
+  .tone-1 { background: linear-gradient(145deg, #9b8cff, #5d57db); }
+  .tone-2 { background: linear-gradient(145deg, #ff78b4, #e52f82); }
+  .tone-3 { background: linear-gradient(145deg, #7cc7ff, #3f70df); }
+  .tone-4 { background: linear-gradient(145deg, #ffc66d, #e68032); }
+  .node-owner-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .node-duration {
+    margin-left: auto;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .node-tags { display: none; }
+  .node-tag {
+    flex: none;
+    border-radius: 6px;
+    padding: 1px 6px;
+    background: var(--surface-3);
+    color: var(--ink-3);
+    font-size: 9.5px;
+    white-space: nowrap;
+  }
+  .node-tag.worktree { color: var(--warn); background: var(--warn-bg); }
+  .node-activity {
+    display: block;
+    min-height: 18px;
+    padding-inline: 10px 4px;
+    margin-top: 7px;
+    overflow: hidden;
+    color: var(--ink-2);
+    font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .node-activity:empty { min-height: 0; margin-top: 0; }
+  .node-error {
+    display: block;
+    max-width: 100%;
+    padding-inline: 10px 4px;
+    margin-top: 7px;
+    overflow: hidden;
+    color: var(--bad);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .flow-focus {
+    position: absolute;
+    left: 16px;
+    bottom: 16px;
+    z-index: 4;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    box-shadow: 0 0 0 1px var(--line), var(--shadow-xs);
+    color: var(--ink-2);
+    cursor: pointer;
+    font-size: 18px;
+    backdrop-filter: blur(10px);
+  }
+  .flow-focus:hover { background: var(--surface); }
+
+  .workflow-progress {
+    display: grid;
+    grid-template-columns: auto minmax(100px, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 50px;
+    padding: 10px 18px;
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .progress-label { color: var(--ink-2); }
+  .progress-dots {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .progress-dots .dot { width: 8px; height: 8px; }
+  .progress-more { color: var(--ink-3); font-size: 10px; }
+  .progress-summary {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    color: var(--ink-3);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .progress-summary strong {
+    color: var(--ink);
+    font-size: 15px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .run-context {
+    display: flex;
+    gap: 8px 18px;
+    flex-wrap: wrap;
+    padding: 12px 4px 0;
+    color: var(--ink-3);
+    font-size: 11px;
+  }
+  .run-context b { color: var(--ink-2); font-weight: 500; }
+  .run-context .path {
+    min-width: 0;
+    max-width: 60ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .support-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+  }
+  .support-panel {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--surface) 93%, transparent);
+  }
+  .support-panel.wide { grid-column: 1 / -1; }
+  .support-panel > h3,
+  .support-panel > summary {
+    padding: 11px 14px;
+    color: var(--ink-3);
+    font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+  }
+  .support-panel > summary { cursor: pointer; }
+  .feed { border-top: 1px solid var(--line); }
+  .feed > div {
+    display: flex;
+    gap: 11px;
+    min-width: 0;
+    padding: 7px 14px;
+  }
+  .feed > div + div { border-top: 1px solid var(--line); }
+  .feed .t { flex: none; color: var(--ink-3); font-variant-numeric: tabular-nums; }
   .feed .phase-ev { color: var(--running); font-weight: 500; }
-
+  .feed .value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .worktree-list > div { display: grid; grid-template-columns: minmax(100px, auto) 1fr; }
+  .worktree-list .path { min-width: 0; overflow: hidden; color: var(--ink-3); text-overflow: ellipsis; white-space: nowrap; }
   pre.result {
-    background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px;
-    padding: 14px; overflow-x: auto; max-height: 320px; overflow-y: auto;
+    max-height: 320px;
+    overflow: auto;
+    border-top: 1px solid var(--line);
+    padding: 14px;
+    background: var(--surface-2);
+    white-space: pre-wrap;
+    word-break: break-word;
   }
-  .error-banner {
-    border: 1px solid color-mix(in srgb, var(--bad) 35%, transparent);
-    background: var(--bad-bg); color: var(--bad);
-    border-radius: 12px; padding: 10px 14px; margin-top: 16px; word-break: break-word;
-  }
-  .empty { color: var(--ink-3); padding: 48px 24px; text-align: center; text-wrap: pretty; }
+  .empty { padding: 54px 24px; color: var(--ink-3); text-align: center; text-wrap: pretty; }
+  .feed .empty { border-top: 1px solid var(--line); padding: 24px; }
 
-  /* Transcript sheet */
-  .sheet-backdrop { position: fixed; inset: 0; background: var(--overlay); z-index: 9; display: none; border-radius: 0; padding: 0; }
+  .sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9;
+    display: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    background: var(--overlay);
+  }
   .sheet-backdrop.open { display: block; }
   .sheet-backdrop:hover { background: var(--overlay); }
   .drawer {
-    position: fixed; top: 0; right: 0; bottom: 0; width: min(640px, 88vw);
-    background: var(--surface); border-left: 1px solid var(--line);
-    box-shadow: var(--shadow-sheet); display: none; flex-direction: column; z-index: 10;
+    position: fixed;
+    inset: 0 0 0 auto;
+    z-index: 10;
+    display: none;
+    flex-direction: column;
+    width: min(640px, 90vw);
+    border-left: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow-sheet);
   }
   .drawer.open { display: flex; }
-  .drawer header { justify-content: space-between; gap: 10px; }
-  .drawer header h1 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .drawer .body { overflow-y: auto; padding: 14px 18px; flex: 1; }
+  .drawer-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 54px;
+    padding: 9px 14px 9px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .drawer-header h1 {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .drawer-header .spacer { flex: 1; }
+  .drawer-live { color: var(--running); font-size: 11px; }
+  .drawer-close {
+    position: relative;
+    border: 0;
+    border-radius: 9px;
+    padding: 5px 9px;
+    background: transparent;
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .drawer-close:hover { background: var(--hover); }
+  .drawer .body { flex: 1; overflow-y: auto; padding: 14px 18px; }
   .tr-event { margin-bottom: 12px; }
   .tr-event .m { color: var(--ink-3); font-size: 10px; font-variant-numeric: tabular-nums; }
   .tr-event pre {
-    white-space: pre-wrap; word-break: break-word;
-    background: var(--surface-2); border: 1px solid var(--line);
-    border-radius: 8px; padding: 8px 10px; margin-top: 3px;
+    margin-top: 3px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 8px 10px;
+    background: var(--surface-2);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .runs-sidebar {
+      display: flex;
+      align-items: flex-start;
+      gap: 5px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+      padding: 8px 12px;
+    }
+    .runs-sidebar .side-h { flex: none; padding: 10px 4px 4px; }
+    .runs-sidebar .run-item { flex: none; width: 240px; }
+    .main-view { padding: 16px; }
+  }
+
+  @media (max-width: 640px) {
+    .app-header { gap: 9px; }
+    .app-header .root { display: none; }
+    .theme-label { display: none; }
+    #tick { font-size: 11px; }
+    .main-view { padding: 10px; }
+    .workflow-card { border-radius: 18px; }
+    .workflow-titlebar { align-items: flex-start; padding: 13px 14px; }
+    .workflow-heading h2 { font-size: 15px; }
+    .workflow-heading .description { white-space: normal; }
+    .workflow-owner .creator-label,
+    .workflow-owner > span:last-child { display: none; }
+    .flow-stage { padding-inline: 26px; }
+    .workflow-progress { grid-template-columns: auto 1fr; }
+    .progress-summary { grid-column: 1 / -1; justify-content: space-between; }
+    .support-grid { grid-template-columns: 1fr; }
+    .support-panel.wide { grid-column: auto; }
+    .run-context { padding-inline: 2px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dot.running,
+    .node-status.running,
+    .flow-edge.running { animation: none; }
+    * { scroll-behavior: auto !important; }
   }
 </style>
 </head>
 <body>
-<header>
-  <h1>wiff</h1>
+<header class="app-header">
+  <div class="app-brand"><span class="app-brand-mark" aria-hidden="true"><span>◇</span></span><h1>wiff</h1></div>
   <span class="root mono" id="root"></span>
   <span class="spacer"></span>
-  <span class="root" id="tick"></span>
-  <button id="theme" aria-label="Toggle theme">◐ theme</button>
+  <span id="tick"></span>
+  <button class="header-button" id="theme" type="button" aria-label="Toggle theme"><span aria-hidden="true">◐</span><span class="theme-label">Theme</span></button>
 </header>
 <div class="layout">
-  <aside id="runs"></aside>
-  <main id="main"><div class="empty">Loading runs…</div></main>
+  <aside class="runs-sidebar" id="runs" aria-label="Workflow runs"></aside>
+  <main class="main-view" id="main"><div class="empty">Loading runs…</div></main>
 </div>
-<div class="sheet-backdrop" id="backdrop"></div>
+<button class="sheet-backdrop" id="backdrop" type="button" aria-label="Close transcript"></button>
 <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
-  <header>
+  <header class="drawer-header">
     <h1 id="drawer-title" class="mono"></h1>
-    <span class="root" id="drawer-live"></span>
-    <button id="drawer-close" aria-label="Close transcript">✕ close</button>
+    <span class="spacer"></span>
+    <span class="drawer-live" id="drawer-live"></span>
+    <button class="drawer-close" id="drawer-close" type="button" aria-label="Close transcript">✕ close</button>
   </header>
   <div class="body" id="drawer-body"></div>
 </div>
@@ -280,10 +864,11 @@
 const $ = (id) => document.getElementById(id);
 let selectedRunId = null;
 let runsCache = [];
-let detail = null;          // { run, journal, activity }
-let structureKey = "";      // full re-render only when this changes
-let agentsIndex = new Map(); // key -> derived agent row
-let drawer = null;          // { runId, file, label, live }
+let detail = null;
+let structureKey = "";
+let agentsIndex = new Map();
+let drawer = null;
+let activeAgents = [];
 
 const savedTheme = localStorage.getItem("cwf-theme");
 if (savedTheme) document.documentElement.dataset.theme = savedTheme;
@@ -292,9 +877,15 @@ $("theme").onclick = () => {
   const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
   document.documentElement.dataset.theme = next;
   localStorage.setItem("cwf-theme", next);
+  requestAnimationFrame(drawConnectors);
 };
 
-const esc = (value) => String(value ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const esc = (value) => String(value ?? "").replace(/[&<>"]/g, (character) => ({
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+}[character]));
 const fmtDur = (ms) => {
   if (ms == null || Number.isNaN(ms)) return "";
   if (ms < 1000) return `${Math.round(ms)}ms`;
@@ -302,11 +893,12 @@ const fmtDur = (ms) => {
   return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
 };
 const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString() : "");
-const fmtTokens = (n) => new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(n);
-const STATUS_ICON = { running: "▶", completed: "✓", failed: "✕", cached: "↺", cancelled: "⊘", interrupted: "⏸" };
-const KIND_ICON = { exec: "❯", edit: "✎", thinking: "…", message: "💬", search: "🔎", tool: "⚙" };
+const fmtTokens = (number) => new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(number);
+const STATUS_ICON = { running: "•", completed: "✓", failed: "×", cached: "↻", cancelled: "–", interrupted: "Ⅱ", pending: "" };
+const KIND_ICON = { exec: "›", edit: "✎", thinking: "…", message: "·", search: "⌕", tool: "⌘" };
 const pill = (status) => `<span class="pill ${esc(status)}">${STATUS_ICON[status] ?? ""} ${esc(status)}</span>`;
 const nowLine = (activity) => (activity ? `${KIND_ICON[activity.kind] ?? "·"} ${activity.text}` : "");
+const slugify = (value) => String(value ?? "phase").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "phase";
 
 async function fetchJson(url) {
   const response = await fetch(url);
@@ -314,19 +906,29 @@ async function fetchJson(url) {
   return response.json();
 }
 
-// ---- data shaping -----------------------------------------------------------
-
 function deriveAgents(journal) {
   const byKey = new Map();
   for (const event of journal) {
     if (event.type === "agent.started") {
       byKey.set(event.key, {
-        key: event.key, label: event.label ?? event.key, phase: event.phase ?? "default",
-        status: "running", startedAt: event.at, options: event.options ?? {},
-        transcript: event.transcriptPath?.split("/").pop(), worktreePath: event.worktreePath,
+        key: event.key,
+        label: event.label ?? event.key,
+        phase: event.phase ?? "default",
+        sequence: event.sequence,
+        status: "running",
+        startedAt: event.at,
+        options: event.options ?? {},
+        transcript: event.transcriptPath?.split("/").pop(),
+        worktreePath: event.worktreePath,
       });
     } else if (event.type === "agent.completed" || event.type === "agent.failed") {
-      const row = byKey.get(event.key) ?? { key: event.key, label: event.key, phase: "default", options: {} };
+      const row = byKey.get(event.key) ?? {
+        key: event.key,
+        label: event.label ?? event.key,
+        phase: event.phase ?? "default",
+        sequence: event.sequence,
+        options: event.options ?? {},
+      };
       row.status = event.type === "agent.completed" ? "completed" : "failed";
       row.endedAt = event.at;
       row.usage = event.usage;
@@ -336,33 +938,55 @@ function deriveAgents(journal) {
       row.transcript = row.transcript ?? event.transcriptPath?.split("/").pop();
       byKey.set(event.key, row);
     } else if (event.type === "agent.cached") {
-      // Keep label/options/usage from a prior attempt's completed event so cached
-      // rows still show what they cost and count toward the run's token total.
       const prior = byKey.get(event.key);
       byKey.set(event.key, {
-        key: event.key, label: prior?.label ?? event.key, phase: prior?.phase ?? "cached", status: "cached",
-        startedAt: event.at, endedAt: event.at, options: prior?.options ?? {}, usage: prior?.usage,
+        key: event.key,
+        label: prior?.label ?? event.label ?? event.key,
+        phase: prior?.phase ?? event.phase ?? "cached",
+        sequence: event.sequence ?? prior?.sequence,
+        status: "cached",
+        startedAt: event.at,
+        endedAt: event.at,
+        options: prior?.options ?? event.options ?? {},
+        usage: prior?.usage,
         transcript: prior?.transcript,
-        worktreePath: event.worktreePath, worktreeKept: event.worktreeKept,
+        worktreePath: event.worktreePath,
+        worktreeKept: event.worktreeKept,
       });
     }
   }
   return [...byKey.values()];
 }
 
-// Phases in first-start order, members sorted by start; series vs parallel from real overlap.
-function phaseGroups(agents) {
-  const byPhase = new Map();
+function plannedPhases(run) {
+  return (run.meta?.phases ?? []).map((phase) => typeof phase === "string" ? { title: phase } : phase).filter((phase) => phase?.title);
+}
+
+function phaseGroups(agents, run = {}, journal = []) {
+  const order = [];
+  const details = new Map();
+  const add = (name, detail) => {
+    if (!name) return;
+    if (!details.has(name)) order.push(name);
+    details.set(name, detail ?? details.get(name) ?? "");
+  };
+  for (const phase of plannedPhases(run)) add(phase.title, phase.detail);
+  for (const event of journal) if (event.type === "phase") add(event.name, event.detail);
+  for (const agent of [...agents].sort((left, right) =>
+    (left.sequence ?? Number.MAX_SAFE_INTEGER) - (right.sequence ?? Number.MAX_SAFE_INTEGER)
+    || String(left.startedAt ?? "").localeCompare(String(right.startedAt ?? "")))) add(agent.phase);
+
+  const byPhase = new Map(order.map((phase) => [phase, []]));
   for (const agent of agents) {
     if (!byPhase.has(agent.phase)) byPhase.set(agent.phase, []);
     byPhase.get(agent.phase).push(agent);
   }
-  const groups = [...byPhase.entries()].map(([phase, members]) => {
-    members.sort((a, b) => String(a.startedAt ?? "").localeCompare(String(b.startedAt ?? "")));
-    return { phase, members, firstStart: members[0]?.startedAt ?? "" };
-  });
-  groups.sort((a, b) => String(a.firstStart).localeCompare(String(b.firstStart)));
-  return groups;
+  for (const members of byPhase.values()) {
+    members.sort((left, right) =>
+      (left.sequence ?? Number.MAX_SAFE_INTEGER) - (right.sequence ?? Number.MAX_SAFE_INTEGER)
+      || String(left.startedAt ?? "").localeCompare(String(right.startedAt ?? "")));
+  }
+  return [...byPhase.entries()].map(([phase, members]) => ({ phase, detail: details.get(phase), members }));
 }
 
 function maxConcurrency(members, now) {
@@ -372,40 +996,47 @@ function maxConcurrency(members, now) {
     points.push([+new Date(member.startedAt), 1]);
     points.push([+new Date(member.endedAt ?? now), -1]);
   }
-  points.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  points.sort((left, right) => left[0] - right[0] || left[1] - right[1]);
   let current = 0;
-  let max = 0;
+  let maximum = 0;
   for (const [, delta] of points) {
     current += delta;
-    if (current > max) max = current;
+    maximum = Math.max(maximum, current);
   }
-  return max;
+  return maximum;
 }
 
-function modeBadge(members) {
+function phaseMode(members) {
   if (members.length < 2) return "";
-  const max = maxConcurrency(members, Date.now());
-  return max > 1
-    ? `<span class="mode-badge parallel">∥ parallel ×${max}</span>`
-    : `<span class="mode-badge series">→ series</span>`;
+  const maximum = maxConcurrency(members, Date.now());
+  return maximum > 1 ? `∥ ×${maximum}` : "→";
 }
 
-// ---- runs sidebar (running workflows pinned on top, with live agent lines) ----
+function phaseStatus(members) {
+  if (!members.length) return "pending";
+  if (members.some((member) => member.status === "failed")) return "failed";
+  if (members.some((member) => member.status === "running")) return "running";
+  if (members.every((member) => member.status === "cached")) return "cached";
+  if (members.every((member) => member.status === "completed" || member.status === "cached")) return "completed";
+  return "pending";
+}
 
-let activeAgents = [];
+function agentTone(agent) {
+  let value = 0;
+  for (const character of `${agent.options.agentType ?? ""}${agent.options.model ?? ""}${agent.key}`) value = (value * 31 + character.charCodeAt(0)) >>> 0;
+  return value % 5;
+}
 
 function runItem(run) {
-  const live = run.status === "running"
-    ? activeAgents.filter((agent) => agent.runId === run.runId)
-    : [];
+  const live = run.status === "running" ? activeAgents.filter((agent) => agent.runId === run.runId) : [];
   return `
-    <button class="run-item ${run.runId === selectedRunId ? "selected" : ""}" data-run="${esc(run.runId)}">
+    <button class="run-item ${run.runId === selectedRunId ? "selected" : ""}" type="button" data-run="${esc(run.runId)}">
       <span class="name"><span class="dot ${esc(run.status)}"></span>${esc(run.name ?? run.runId)}</span>
-      <div class="sub">${pill(run.status)} · ${fmtTime(run.startedAt)}</div>
-      <div class="sub mono">${esc(run.runId.slice(0, 14))}… · ${run.stats ? `${run.stats.completed}✓ ${run.stats.failed}✕ ${run.stats.cached}↺` : ""}</div>
-      ${live.map((agent) => `<div class="live" title="${esc(agent.activity?.text ?? agent.key)}">
+      <span class="sub">${pill(run.status)} · ${fmtTime(run.startedAt)}</span>
+      <span class="sub mono">${esc(run.runId.slice(0, 14))}… · ${run.stats ? `${run.stats.completed}✓ ${run.stats.failed}× ${run.stats.cached}↻` : ""}</span>
+      ${live.map((agent) => `<span class="live" title="${esc(agent.activity?.text ?? agent.key)}">
         <span class="dot running"></span><span>${esc(agent.label)}</span><span class="doing">${esc(nowLine(agent.activity))}</span>
-      </div>`).join("")}
+      </span>`).join("")}
     </button>`;
 }
 
@@ -418,84 +1049,178 @@ function renderRunsList() {
   ].join("") || `<div class="empty">No runs yet.</div>`;
 }
 
-// ---- run detail: skeleton render + in-place dynamic updates -------------------
-
-function computeStructureKey(run, agents) {
-  return [run.runId, run.status, run.attempt, agents.map((agent) => `${agent.key}:${agent.status}`).join("|")].join("§");
+function computeStructureKey(run, agents, journal) {
+  return [
+    run.runId,
+    run.status,
+    run.attempt,
+    run.worktrees?.length ?? 0,
+    run.result == null ? 0 : 1,
+    JSON.stringify(plannedPhases(run)),
+    journal.filter((event) => event.type === "phase").map((event) => event.name).join("|"),
+    agents.map((agent) => `${agent.key}:${agent.phase}:${agent.status}`).join("|"),
+  ].join("§");
 }
 
-function timelineRow(agent) {
-  return `<div class="tl-row" data-tl="${esc(agent.key)}">
-    <span class="tl-label" title="${esc(agent.key)}">${esc(agent.label)}</span>
-    <span class="tl-track"><span class="tl-bar ${esc(agent.status)}"></span></span>
-    <span class="tl-dur"></span>
-  </div>`;
+function agentDisplay(agent) {
+  if (agent.options.agentType) return `@${agent.options.agentType}`;
+  if (agent.options.model) return agent.options.model;
+  return "agent";
 }
 
-function agentCard(agent) {
-  const tokens = agent.usage?.total?.totalTokens;
-  return `<button class="card" data-card="${esc(agent.key)}" data-transcript="${esc(agent.transcript ?? "")}" data-label="${esc(agent.label)}">
-    <div class="top"><span class="label" title="${esc(agent.key)}">${esc(agent.label)}</span>${pill(agent.status)}</div>
-    <div class="badges">
-      ${agent.options.model ? `<span class="badge">${esc(agent.options.model)}</span>` : ""}
-      ${agent.options.effort ? `<span class="badge">${esc(agent.options.effort)}</span>` : ""}
-      ${agent.options.sandbox ? `<span class="badge">${esc(agent.options.sandbox)}</span>` : ""}
-      ${agent.options.agentType ? `<span class="badge">@${esc(agent.options.agentType)}</span>` : ""}
-      ${agent.worktreePath ? `<span class="badge wt">⎇ worktree${agent.worktreeKept ? " (kept)" : ""}</span>` : ""}
-      <span class="badge" data-dur></span>
-      ${tokens ? `<span class="badge">${tokens.toLocaleString()} tok</span>` : ""}
-    </div>
-    <div class="now" data-now></div>
-    ${agent.error ? `<div class="err">${esc(agent.error)}</div>` : ""}
+function agentNode(agent) {
+  const tags = [
+    agent.options.effort,
+    agent.options.sandbox,
+    agent.worktreePath ? `worktree${agent.worktreeKept ? " · kept" : ""}` : null,
+  ].filter(Boolean);
+  return `<button class="agent-node ${esc(agent.status)}" type="button"
+      data-node="${esc(agent.key)}" data-status="${esc(agent.status)}" data-card="${esc(agent.key)}"
+      data-transcript="${esc(agent.transcript ?? "")}" data-label="${esc(agent.label)}"
+      ${agent.transcript ? "" : "disabled"} title="${esc(agent.transcript ? `Open ${agent.label} transcript` : agent.label)}">
+    <span class="agent-node-main" data-status="${esc(agent.status)}">
+      <span class="node-status ${esc(agent.status)}" aria-hidden="true">${STATUS_ICON[agent.status] ?? ""}</span>
+      <span class="sr-only">${esc(agent.status)}</span>
+      <span class="node-label">${esc(agent.label)}</span>
+    </span>
+    <span class="agent-node-owner">
+      <span class="agent-orb tone-${agentTone(agent)}" aria-hidden="true"></span>
+      <span class="node-owner-label">${esc(agentDisplay(agent))}</span>
+      <span class="node-duration" data-dur></span>
+    </span>
+    ${tags.length ? `<span class="node-tags">${tags.map((tag) => `<span class="node-tag ${String(tag).startsWith("worktree") ? "worktree" : ""}">${esc(tag)}</span>`).join("")}</span>` : ""}
+    <span class="node-activity" data-now></span>
+    ${agent.error ? `<span class="node-error" title="${esc(agent.error)}">${esc(agent.error)}</span>` : ""}
   </button>`;
 }
 
-function renderSkeleton(run, agents, journal) {
-  const groups = phaseGroups(agents);
-  const cards = groups.map(({ phase, members }) =>
-    `<div class="phase-title">${esc(phase)} ${modeBadge(members)} <small>${members.length} agent${members.length === 1 ? "" : "s"}</small></div>
-      <div class="cards">${members.map(agentCard).join("")}</div>`).join("");
-  const timed = agents.filter((agent) => agent.startedAt);
-  const timedGroups = groups
-    .map(({ phase, members }) => ({ phase, members: members.filter((agent) => agent.startedAt) }))
-    .filter(({ members }) => members.length);
-  const logs = journal.filter((event) => event.type === "log" || event.type === "phase").slice(-80);
+function phaseColumn(group, index) {
+  const status = phaseStatus(group.members);
+  const mode = phaseMode(group.members);
+  return `<section class="phase-column" id="phase-${slugify(group.phase)}-${index}" role="listitem" data-status="${status}">
+    <div class="phase-heading" title="${esc(group.detail ?? group.phase)}">
+      <span class="phase-index">${String(index + 1).padStart(2, "0")}</span>
+      <span class="phase-name">${esc(group.phase)}</span>
+      <span class="phase-count">${group.members.length}</span>
+      ${mode ? `<span class="phase-mode">${mode}</span>` : ""}
+    </div>
+    <div class="phase-hub" aria-hidden="true"></div>
+    <div class="phase-nodes">${group.members.map(agentNode).join("") || `<div class="phase-empty">Waiting for agents</div>`}</div>
+  </section>`;
+}
 
-  $("main").innerHTML = `
-    <div class="run-head">
-      <h2>${esc(run.name ?? run.runId)} ${pill(run.status)}</h2>
-      ${run.description ? `<div class="desc">${esc(run.description)}</div>` : ""}
-      <div class="meta">
-        <span><b>run</b> <span class="mono">${esc(run.runId)}</span></span>
-        <span><b>elapsed</b> <span id="elapsed"></span></span>
-        <span><b>attempt</b> ${run.attempt ?? 1}</span>
-        <span id="phase-slot">${run.phase ? `<b>phase</b> ${esc(run.phase)}` : ""}</span>
-        <span><b>cwd</b> <span class="mono">${esc(run.cwd ?? "")}</span></span>
+function progressDots(agents, total) {
+  const statuses = agents.map((agent) => agent.status);
+  while (statuses.length < total) statuses.push("pending");
+  const visible = statuses.slice(0, 24);
+  return `${visible.map((status, index) => `<span class="dot ${esc(status)}" title="Step ${index + 1}: ${esc(status)}"></span>`).join("")}${statuses.length > visible.length ? `<span class="progress-more">+${statuses.length - visible.length}</span>` : ""}`;
+}
+
+function renderSkeleton(run, agents, journal) {
+  const groups = phaseGroups(agents, run, journal);
+  if (!groups.length) groups.push({ phase: run.phase ?? "Workflow", detail: "", members: [] });
+  const total = Math.max(run.stats?.requested ?? 0, agents.length);
+  const done = agents.filter((agent) => agent.status === "completed" || agent.status === "cached").length;
+  const logs = journal.filter((event) => event.type === "log" || event.type === "phase").slice(-12);
+  const supportPanels = [
+    `<section class="support-panel" id="run-activity"><h3>Activity</h3><div class="feed" id="activity-feed">${logs.length ? "" : `<div class="empty">No activity yet.</div>`}</div></section>`,
+    run.worktrees?.length ? `<section class="support-panel" id="kept-worktrees"><h3>Kept worktrees</h3><div class="feed worktree-list">${run.worktrees.map((entry) =>
+      `<div><span class="mono">${esc(entry.key)}</span><span class="mono path" title="${esc(entry.path)}">${esc(entry.path)}</span></div>`).join("")}</div></section>` : "",
+    run.result !== undefined && run.result !== null ? `<details class="support-panel wide" id="run-result"><summary>Result</summary><pre class="result mono">${esc(JSON.stringify(run.result, null, 2))}</pre></details>` : "",
+  ].filter(Boolean).join("");
+
+  const stageWidth = Math.max(900, groups.length * 284);
+  $("main").innerHTML = `<div class="workflow-shell">
+    <article class="workflow-card">
+      <header class="workflow-titlebar">
+        <span class="workflow-symbol" aria-hidden="true"><span>◇</span></span>
+        <div class="workflow-heading">
+          <h2><span class="title">${esc(run.name ?? run.runId)}</span><span class="workflow-number">#${run.attempt ?? 1}</span>${pill(run.status)}</h2>
+          ${run.description ? `<p class="description">${esc(run.description)}</p>` : ""}
+        </div>
+        <div class="workflow-owner"><span class="creator-label">Creator</span><span class="creator-avatar" aria-hidden="true"></span><span>Wiff</span></div>
+      </header>
+      ${run.error ? `<div class="workflow-error">${STATUS_ICON.failed} ${esc(run.error.message)}</div>` : ""}
+      <div class="flow-viewport" id="flow-viewport">
+        <div class="flow-stage" id="flow-stage" style="--phase-count:${groups.length};--stage-width:${stageWidth}px">
+          <svg class="flow-edges" id="flow-edges" aria-hidden="true"></svg>
+          <div class="flow-grid" role="list" aria-label="Workflow phases">${groups.map(phaseColumn).join("")}</div>
+        </div>
+        <button class="flow-focus" type="button" data-flow-focus aria-label="Focus active workflow step" title="Focus active step">⌗</button>
       </div>
+      <footer class="workflow-progress">
+        <span class="progress-label">Progress</span>
+        <span class="progress-dots">${progressDots(agents, total)}</span>
+        <span class="progress-summary"><span><strong id="progress-count">${done}</strong>/${total || 0}</span><span id="elapsed"></span><span id="token-count">–</span></span>
+      </footer>
+    </article>
+    <div class="run-context">
+      <span><b>Run</b> <span class="mono">${esc(run.runId)}</span></span>
+      <span><b>Phase</b> <span id="phase-slot">${esc(run.phase ?? "—")}</span></span>
+      <span><b>Requested</b> <span id="requested-count">${run.stats?.requested ?? 0}</span></span>
+      <span><b>Failed</b> <span id="failed-count">${run.stats?.failed ?? 0}</span></span>
+      <span class="path" title="${esc(run.cwd ?? "")}"><b>Cwd</b> <span class="mono">${esc(run.cwd ?? "")}</span></span>
     </div>
-    <div class="counters">${["requested", "running", "completed", "failed", "cached"].map((name) =>
-      `<div class="counter"><div class="n" data-counter="${name}">0</div><div class="l">${name}</div></div>`).join("")}
-      <div class="counter"><div class="n" data-counter="tokens">–</div><div class="l">tokens</div></div>
-    </div>
-    ${run.error ? `<div class="error-banner">${STATUS_ICON.failed} ${esc(run.error.message)}</div>` : ""}
-    ${timed.length ? `<section><h3>Timeline</h3><div class="timeline">${timedGroups.map(({ phase, members }) =>
-      `<div class="tl-phase" data-tlphase="${esc(phase)}">
-        <span class="name">${esc(phase)} ${modeBadge(members)}</span>
-        <span class="tl-phase-track"><span class="tl-phase-bar"></span></span>
-        <span class="tl-dur" data-phasedur></span>
-      </div>${members.map(timelineRow).join("")}`).join("")}
-      <div class="tl-axis"><span id="tl-start"></span><span id="tl-span"></span><span id="tl-end"></span></div>
-      <div class="legend">
-        <span><span class="swatch" style="background:var(--running)"></span>running</span>
-        <span><span class="swatch" style="background:var(--good)"></span>completed</span>
-        <span><span class="swatch" style="background:var(--bad)"></span>failed</span>
-        <span><span class="swatch" style="background:var(--cached)"></span>cached</span>
-      </div></div></section>` : ""}
-    <section><h3>Agents</h3>${cards || `<div class="empty">No agents yet.</div>`}</section>
-    ${run.worktrees?.length ? `<section><h3>Kept worktrees</h3><div class="feed">${run.worktrees.map((entry) =>
-      `<div><span class="mono">${esc(entry.key)}</span><span class="mono" style="color:var(--ink-3)">${esc(entry.path)}</span></div>`).join("")}</div></section>` : ""}
-    <section id="activity-section" ${logs.length ? "" : "hidden"}><h3>Activity</h3><div class="feed" id="activity-feed"></div></section>
-    ${run.result !== undefined && run.result !== null ? `<section><h3>Result</h3><pre class="result mono">${esc(JSON.stringify(run.result, null, 2))}</pre></section>` : ""}`;
+    <div class="support-grid">${supportPanels}</div>
+  </div>`;
+
+  requestAnimationFrame(() => {
+    drawConnectors();
+    focusFlow(false);
+  });
+}
+
+function connectorTargets(column) {
+  const nodes = [...column.querySelectorAll(".agent-node-main")];
+  return nodes.length ? nodes : [column.querySelector(".phase-hub")];
+}
+
+function drawConnectors() {
+  const stage = $("flow-stage");
+  const svg = $("flow-edges");
+  if (!stage || !svg) return;
+  const columns = [...stage.querySelectorAll(".phase-column")];
+  const stageRect = stage.getBoundingClientRect();
+  const width = stage.scrollWidth;
+  const height = Math.max(stage.scrollHeight, 440);
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", width);
+  svg.setAttribute("height", height);
+  const paths = [];
+
+  for (let columnIndex = 0; columnIndex < columns.length - 1; columnIndex += 1) {
+    const sources = connectorTargets(columns[columnIndex]).filter(Boolean);
+    const targets = connectorTargets(columns[columnIndex + 1]).filter(Boolean);
+    const count = Math.max(sources.length, targets.length);
+    for (let index = 0; index < count; index += 1) {
+      const source = sources[Math.min(sources.length - 1, Math.floor(index * sources.length / count))];
+      const target = targets[Math.min(targets.length - 1, Math.floor(index * targets.length / count))];
+      if (!source || !target) continue;
+      const sourceRect = source.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const x1 = sourceRect.right - stageRect.left;
+      const y1 = sourceRect.top + sourceRect.height / 2 - stageRect.top;
+      const x2 = targetRect.left - stageRect.left;
+      const y2 = targetRect.top + targetRect.height / 2 - stageRect.top;
+      const bend = Math.max(30, (x2 - x1) * 0.48);
+      const status = target.dataset.status ?? columns[columnIndex + 1].dataset.status ?? "pending";
+      paths.push(`<path class="flow-edge ${esc(status)}" d="M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${(x1 + bend).toFixed(1)} ${y1.toFixed(1)}, ${(x2 - bend).toFixed(1)} ${y2.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}" />`);
+    }
+  }
+  svg.innerHTML = paths.join("");
+}
+
+function focusFlow(smooth = true) {
+  const viewport = $("flow-viewport");
+  const stage = $("flow-stage");
+  if (!viewport || !stage) return;
+  const columns = [...stage.querySelectorAll(".phase-column")];
+  const target = columns.find((column) => column.dataset.status === "running")
+    ?? columns.find((column) => !["completed", "cached"].includes(column.dataset.status))
+    ?? columns.at(-1);
+  if (!target) return;
+  const left = Math.max(0, target.offsetLeft - Math.max(24, (viewport.clientWidth - target.clientWidth) / 2));
+  viewport.scrollTo({ left, behavior: smooth ? "smooth" : "auto" });
 }
 
 function updateDynamic() {
@@ -503,94 +1228,46 @@ function updateDynamic() {
   const { run, journal, activity } = detail;
   const agents = [...agentsIndex.values()];
   const now = Date.now();
-
-  const elapsedEl = $("elapsed");
-  if (elapsedEl) {
-    elapsedEl.textContent = fmtDur(
-      (run.completedAt ? +new Date(run.completedAt) : now) - +new Date(run.startedAt),
-    );
-  }
+  const elapsed = (run.completedAt ? +new Date(run.completedAt) : now) - +new Date(run.startedAt);
+  const elapsedElement = $("elapsed");
+  if (elapsedElement) elapsedElement.textContent = fmtDur(elapsed);
   const phaseSlot = $("phase-slot");
-  if (phaseSlot && run.phase) phaseSlot.innerHTML = `<b>phase</b> ${esc(run.phase)}`;
-  for (const name of ["requested", "running", "completed", "failed", "cached"]) {
-    const el = document.querySelector(`[data-counter="${name}"]`);
-    if (el) el.textContent = run.stats?.[name] ?? 0;
-  }
-  const tokensEl = document.querySelector('[data-counter="tokens"]');
-  if (tokensEl) {
-    const total = agents.reduce((sum, agent) => sum + (agent.usage?.total?.totalTokens ?? 0), 0);
-    tokensEl.textContent = total ? fmtTokens(total) : "–";
-    tokensEl.title = total ? `${total.toLocaleString()} tokens across ${agents.length} agents` : "";
-  }
+  if (phaseSlot) phaseSlot.textContent = run.phase ?? "—";
+  const requested = $("requested-count");
+  if (requested) requested.textContent = run.stats?.requested ?? 0;
+  const failed = $("failed-count");
+  if (failed) failed.textContent = run.stats?.failed ?? 0;
+  const progressCount = $("progress-count");
+  if (progressCount) progressCount.textContent = agents.filter((agent) => agent.status === "completed" || agent.status === "cached").length;
 
-  // Timeline geometry.
-  const timed = agents.filter((agent) => agent.startedAt);
-  if (timed.length) {
-    const start = Math.min(...timed.map((agent) => +new Date(agent.startedAt)));
-    const end = Math.max(
-      run.status === "running" ? now : 0,
-      ...timed.map((agent) => +new Date(agent.endedAt ?? now)),
-    );
-    const span = Math.max(end - start, 1);
-    for (const agent of timed) {
-      const row = document.querySelector(`[data-tl="${CSS.escape(agent.key)}"]`);
-      if (!row) continue;
-      const from = +new Date(agent.startedAt);
-      const to = agent.endedAt ? +new Date(agent.endedAt) : now;
-      const bar = row.querySelector(".tl-bar");
-      bar.style.left = `${((from - start) / span) * 100}%`;
-      bar.style.width = `${Math.max(((to - from) / span) * 100, 0.8)}%`;
-      bar.title = `${agent.label} — ${agent.status} · ${fmtDur(to - from)}`;
-      row.querySelector(".tl-dur").textContent = fmtDur(to - from);
-    }
-    const startEl = $("tl-start");
-    if (startEl) {
-      startEl.textContent = fmtTime(new Date(start).toISOString());
-      $("tl-span").textContent = fmtDur(span);
-      $("tl-end").textContent = fmtTime(new Date(end).toISOString());
-    }
-
-    // Phase-range bars on the shared axis: sequential phases read as adjacent spans.
-    for (const { phase, members } of phaseGroups(timed)) {
-      const row = document.querySelector(`[data-tlphase="${CSS.escape(phase)}"]`);
-      if (!row) continue;
-      const from = Math.min(...members.map((agent) => +new Date(agent.startedAt)));
-      const to = Math.max(...members.map((agent) => +new Date(agent.endedAt ?? now)));
-      const bar = row.querySelector(".tl-phase-bar");
-      bar.style.left = `${((from - start) / span) * 100}%`;
-      bar.style.width = `${Math.max(((to - from) / span) * 100, 0.5)}%`;
-      const phaseTokens = members.reduce((sum, m) => sum + (m.usage?.total?.totalTokens ?? 0), 0);
-      bar.title = `${phase} — ${fmtDur(to - from)}${phaseTokens ? ` · ${phaseTokens.toLocaleString()} tok` : ""}`;
-      row.querySelector("[data-phasedur]").textContent =
-        `${fmtDur(to - from)}${phaseTokens ? ` · ${fmtTokens(phaseTokens)}` : ""}`;
-    }
+  const totalTokens = agents.reduce((sum, agent) => sum + (agent.usage?.total?.totalTokens ?? 0), 0);
+  const tokenCount = $("token-count");
+  if (tokenCount) {
+    tokenCount.textContent = totalTokens ? `${fmtTokens(totalTokens)} tokens` : "— tokens";
+    tokenCount.title = totalTokens ? `${totalTokens.toLocaleString()} tokens across ${agents.length} agents` : "";
   }
 
-  // Card durations + live "now doing" lines.
   for (const agent of agents) {
-    const card = document.querySelector(`[data-card="${CSS.escape(agent.key)}"]`);
-    if (!card) continue;
+    const node = document.querySelector(`[data-node="${CSS.escape(agent.key)}"]`);
+    if (!node) continue;
     const to = agent.endedAt ? +new Date(agent.endedAt) : now;
-    const durEl = card.querySelector("[data-dur]");
-    if (durEl && agent.startedAt) durEl.textContent = fmtDur(to - +new Date(agent.startedAt));
-    const nowEl = card.querySelector("[data-now]");
-    if (nowEl) {
+    const duration = node.querySelector("[data-dur]");
+    if (duration && agent.startedAt) duration.textContent = fmtDur(to - +new Date(agent.startedAt));
+    const doing = node.querySelector("[data-now]");
+    if (doing) {
       const line = agent.status === "running" ? nowLine(activity?.[agent.key]) : "";
-      nowEl.textContent = line;
-      nowEl.title = line;
+      doing.textContent = line;
+      doing.title = line;
     }
   }
 
-  // Activity feed (no buttons inside — safe to rebuild when it grows).
-  const logs = journal.filter((event) => event.type === "log" || event.type === "phase").slice(-80);
+  const logs = journal.filter((event) => event.type === "log" || event.type === "phase").slice(-12);
   const feed = $("activity-feed");
   if (feed && String(logs.length) !== feed.dataset.count) {
     feed.dataset.count = String(logs.length);
-    $("activity-section").hidden = logs.length === 0;
-    feed.innerHTML = logs.map((event) =>
-      `<div><span class="t mono">${fmtTime(event.at)}</span>${event.type === "phase"
-        ? `<span class="phase-ev">phase → ${esc(event.name)}</span>`
-        : `<span class="mono">${esc(typeof event.value === "string" ? event.value : JSON.stringify(event.value))}</span>`}</div>`).join("");
+    feed.innerHTML = logs.map((event) => `<div><span class="t mono">${fmtTime(event.at)}</span>${event.type === "phase"
+      ? `<span class="phase-ev">phase → ${esc(event.name)}</span>`
+      : `<span class="mono value">${esc(typeof event.value === "string" ? event.value : JSON.stringify(event.value))}</span>`}</div>`).join("") || `<div class="empty">No activity yet.</div>`;
   }
 }
 
@@ -598,15 +1275,13 @@ function applyDetail(payload) {
   detail = payload;
   const agents = deriveAgents(payload.journal);
   agentsIndex = new Map(agents.map((agent) => [agent.key, agent]));
-  const key = computeStructureKey(payload.run, agents);
+  const key = computeStructureKey(payload.run, agents, payload.journal);
   if (key !== structureKey) {
     structureKey = key;
     renderSkeleton(payload.run, agents, payload.journal);
   }
   updateDynamic();
 }
-
-// ---- polling ------------------------------------------------------------------
 
 async function refreshRuns() {
   try {
@@ -642,11 +1317,9 @@ async function refreshActive() {
       ? `● ${payload.agents.length} agent${payload.agents.length === 1 ? "" : "s"} live`
       : "";
   } catch {
-    // Transient — leave the sidebar as-is.
+    // Transient — keep the previous live state.
   }
 }
-
-// ---- interaction (delegated, survives re-renders) --------------------------------
 
 document.addEventListener("click", (event) => {
   const runButton = event.target.closest("[data-run]");
@@ -657,10 +1330,19 @@ document.addEventListener("click", (event) => {
     refreshDetail();
     return;
   }
+  if (event.target.closest("[data-flow-focus]")) {
+    focusFlow(true);
+    return;
+  }
   const card = event.target.closest("[data-card]");
   if (card && card.dataset.transcript) {
-    openDrawer(selectedRunId, card.dataset.transcript, card.dataset.label,
-      agentsIndex.get(card.dataset.card)?.status === "running");
+    openDrawer(
+      selectedRunId,
+      card.dataset.transcript,
+      card.dataset.label,
+      agentsIndex.get(card.dataset.card)?.status === "running",
+      card.dataset.card,
+    );
   }
 });
 
@@ -676,7 +1358,7 @@ async function renderDrawerBody() {
       if (item?.text) text = item.text;
       else if (item?.summary_text) text = item.summary_text;
       else if (item?.command) text = `$ ${item.command}`;
-      else if (item || event?.params?.delta) return ""; // empty items and stream deltas are noise
+      else if (item || event?.params?.delta) return "";
       else text = JSON.stringify(event?.params ?? event, null, 2);
       if (text.length > 4000) text = `${text.slice(0, 4000)}\n… (truncated)`;
       return `<div class="tr-event"><div class="m mono">${fmtTime(at)} · ${esc(event?.method ?? "")}${item?.type ? ` · ${esc(item.type)}` : ""}</div><pre class="mono">${esc(text)}</pre></div>`;
@@ -688,8 +1370,8 @@ async function renderDrawerBody() {
   }
 }
 
-function openDrawer(runId, file, label, live) {
-  drawer = { runId, file, label, live, firstLoad: true };
+function openDrawer(runId, file, label, live, agentKey) {
+  drawer = { runId, file, label, live, agentKey, firstLoad: true };
   $("drawer-title").textContent = label;
   $("drawer-live").textContent = live ? "● live tail" : "";
   $("drawer-body").innerHTML = `<div class="empty">Loading…</div>`;
@@ -697,16 +1379,17 @@ function openDrawer(runId, file, label, live) {
   $("backdrop").classList.add("open");
   renderDrawerBody();
 }
+
 function closeDrawer() {
   drawer = null;
   $("drawer").classList.remove("open");
   $("backdrop").classList.remove("open");
 }
+
 $("drawer-close").onclick = closeDrawer;
 $("backdrop").onclick = closeDrawer;
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeDrawer(); });
-
-// ---- timers ----------------------------------------------------------------------
+window.addEventListener("resize", () => requestAnimationFrame(drawConnectors));
 
 refreshRuns();
 refreshActive();
@@ -717,13 +1400,13 @@ setInterval(() => {
 }, 1500);
 setInterval(updateDynamic, 1000);
 setInterval(() => {
-  if (drawer?.live) {
-    if (agentsIndex.get(drawer.file?.split("-").slice(0, -1).join("-"))?.status !== "running") {
-      $("drawer-live").textContent = "";
-      drawer.live = false;
-    }
-    renderDrawerBody();
+  if (!drawer?.live) return;
+  if (agentsIndex.get(drawer.agentKey)?.status !== "running") {
+    drawer.live = false;
+    $("drawer-live").textContent = "";
+    return;
   }
+  renderDrawerBody();
 }, 2000);
 </script>
 </body>
