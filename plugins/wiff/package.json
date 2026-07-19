@@ -1,6 +1,6 @@
 {
   "name": "@xxxoooxoxo/wiff",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "mcpName": "io.github.xxxoooxoxo/wiff",
   "description": "Deterministic, resumable multi-agent workflows \u2014 a harness-agnostic MCP server that orchestrates Codex, Claude, Cursor, and Kimi agents from plain JavaScript, with journaled resume, git worktree isolation, and personas.",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "wiff",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Run deterministic, resumable JavaScript workflows across Codex, Claude, Cursor, and Kimi agents.",
   "author": {
     "name": "Ali Hsareini"
