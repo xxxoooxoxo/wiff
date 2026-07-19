@@ -196,7 +196,10 @@
   }
   .header-button:hover { background: var(--hover); }
   .header-button:focus-visible,
-  .run-item:focus-visible,
+  .run-main:focus-visible,
+  .run-pin:focus-visible,
+  .chip:focus-visible,
+  .side-reset:focus-visible,
   .agent-node:focus-visible,
   .flow-focus:focus-visible,
   .drawer-close:focus-visible {
@@ -210,11 +213,14 @@
     min-height: 0;
   }
   .runs-sidebar {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
-    overflow-y: auto;
+    min-height: 0;
+    overflow: hidden;
     border-right: 1px solid var(--line);
     background: var(--surface);
-    padding: 10px 8px 24px;
+    padding: 10px 8px 0;
   }
   .main-view {
     isolation: isolate;
@@ -226,6 +232,85 @@
     padding: clamp(16px, 2.5vw, 34px);
   }
 
+  .side-tools {
+    display: grid;
+    flex: none;
+    gap: 8px;
+    padding: 4px 2px 10px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 8px 2px 7px;
+    background: transparent;
+    color: var(--ink-3);
+    font-size: 11px;
+    line-height: 1.6;
+    cursor: pointer;
+  }
+  .chip:hover { background: var(--hover); }
+  .chip .dot { width: 6px; height: 6px; }
+  .chip .dot.running { animation: none; }
+  .chip[aria-pressed="false"] .dot { opacity: 0.45; }
+  .chip-count { font-variant-numeric: tabular-nums; opacity: 0.8; }
+  .chip[aria-pressed="true"] { border-color: transparent; }
+  .chip[aria-pressed="true"][data-status="running"] { color: var(--running); background: var(--running-bg); }
+  .chip[aria-pressed="true"][data-status="completed"] { color: var(--good); background: var(--good-bg); }
+  .chip[aria-pressed="true"][data-status="failed"] { color: var(--bad); background: var(--bad-bg); }
+  .chip[aria-pressed="true"][data-status="cancelled"],
+  .chip[aria-pressed="true"][data-status="interrupted"] { color: var(--warn); background: var(--warn-bg); }
+  .side-tools-row { display: flex; align-items: center; gap: 8px; }
+  .select-wrap { display: inline-grid; grid-template-columns: 1fr 24px; align-items: center; }
+  .select-wrap select {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    appearance: none;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 3px 22px 3px 8px;
+    background: var(--surface);
+    color: var(--ink-2);
+    font: inherit;
+    font-size: 11px;
+    line-height: 1.6;
+    cursor: pointer;
+  }
+  .select-wrap select:hover { background: var(--hover); }
+  .select-wrap select:focus-visible { outline: 2px solid var(--running); outline-offset: 0; }
+  .select-wrap svg { grid-column: 2; grid-row: 1; place-self: center; pointer-events: none; color: var(--ink-3); }
+  .side-count {
+    margin-left: auto;
+    color: var(--ink-3);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .side-reset {
+    border: 0;
+    border-radius: 7px;
+    padding: 3px 7px;
+    background: transparent;
+    color: var(--running);
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .side-reset:hover { background: var(--hover); }
+
+  .side-list {
+    display: grid;
+    flex: 1;
+    align-content: start;
+    gap: 1px;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 24px;
+  }
   .side-h {
     padding: 11px 10px 5px;
     color: var(--ink-3);
@@ -235,19 +320,55 @@
     letter-spacing: .08em;
     text-transform: uppercase;
   }
-  .run-item {
+  .run-item { position: relative; border-radius: 10px; color: var(--ink); }
+  .run-item:hover { background: var(--hover); }
+  .run-item.selected { background: var(--active); }
+  .run-main {
     width: 100%;
     border: 0;
     border-radius: 10px;
-    padding: 9px 10px;
+    padding: 9px 30px 9px 10px;
     background: transparent;
-    color: var(--ink);
+    color: inherit;
     cursor: pointer;
     text-align: left;
   }
-  .run-item + .run-item { margin-top: 1px; }
-  .run-item:hover { background: var(--hover); }
-  .run-item.selected { background: var(--active); }
+  .run-pin {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border: 0;
+    border-radius: 7px;
+    padding: 0;
+    background: transparent;
+    color: var(--ink-3);
+    cursor: pointer;
+    opacity: 0;
+  }
+  .run-item:hover .run-pin,
+  .run-item:focus-within .run-pin,
+  .run-pin[aria-pressed="true"] { opacity: 1; }
+  .run-pin:hover { background: var(--active); color: var(--ink-2); }
+  .run-pin[aria-pressed="true"] { color: var(--warn); }
+  .run-pin svg { fill: currentColor; }
+  .run-pin .hit { display: none; }
+  @media (pointer: coarse) {
+    .run-pin { opacity: 0.6; }
+    .run-pin[aria-pressed="true"] { opacity: 1; }
+    .run-pin .hit {
+      display: block;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+  }
   .run-item .name {
     display: flex;
     align-items: center;
@@ -851,17 +972,24 @@
   @media (max-width: 900px) {
     .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
     .runs-sidebar {
+      overflow: hidden;
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+      padding: 8px 12px 10px;
+    }
+    .side-tools { padding: 0; margin-bottom: 8px; border-bottom: 0; }
+    .chip-row { flex-wrap: nowrap; overflow-x: auto; }
+    .side-list {
       display: flex;
       align-items: flex-start;
       gap: 5px;
       overflow-x: auto;
       overflow-y: hidden;
-      border-right: 0;
-      border-bottom: 1px solid var(--line);
-      padding: 8px 12px;
+      padding-bottom: 2px;
     }
-    .runs-sidebar .side-h { flex: none; padding: 10px 4px 4px; }
-    .runs-sidebar .run-item { flex: none; width: 240px; }
+    .side-list .side-h { flex: none; padding: 10px 4px 4px; }
+    .side-list .run-item { flex: none; width: 240px; }
+    .side-list .empty { flex: 1; padding: 24px; }
     .main-view { padding: 16px; }
   }
 
@@ -902,7 +1030,25 @@
   <button class="header-button" id="theme" type="button" aria-label="Toggle theme"><span aria-hidden="true">◐</span><span class="theme-label">Theme</span></button>
 </header>
 <div class="layout">
-  <aside class="runs-sidebar" id="runs" aria-label="Workflow runs"></aside>
+  <aside class="runs-sidebar" aria-label="Workflow runs">
+    <div class="side-tools">
+      <div class="chip-row" id="status-filters" role="group" aria-label="Filter runs by status"></div>
+      <div class="side-tools-row">
+        <span class="select-wrap">
+          <select id="launched-filter" name="launched" aria-label="Filter by last launched">
+            <option value="all">Any time</option>
+            <option value="24h">Last 24 hours</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+          </select>
+          <svg viewBox="0 0 8 5" width="8" height="5" fill="none" aria-hidden="true"><path d="M.5.5 4 4 7.5.5" stroke="currentColor"/></svg>
+        </span>
+        <button class="side-reset" id="filters-reset" type="button" hidden>Reset</button>
+        <span class="side-count" id="side-count"></span>
+      </div>
+    </div>
+    <div class="side-list" id="runs"></div>
+  </aside>
   <main class="main-view" id="main"><div class="empty">Loading runs…</div></main>
 </div>
 <button class="sheet-backdrop" id="backdrop" type="button" aria-label="Close transcript"></button>
@@ -985,6 +1131,69 @@ const KIND_ICON = { exec: "›", edit: "✎", thinking: "…", message: "·", se
 const pill = (status) => `<span class="pill ${esc(status)}">${STATUS_ICON[status] ?? ""} ${esc(status)}</span>`;
 const nowLine = (activity) => (activity ? `${KIND_ICON[activity.kind] ?? "·"} ${activity.text}` : "");
 const slugify = (value) => String(value ?? "phase").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "phase";
+
+const STATUS_FILTERS = ["running", "completed", "failed", "cancelled", "interrupted"];
+const LAUNCHED_WINDOWS = { all: Number.POSITIVE_INFINITY, "24h": 86_400_000, "7d": 604_800_000, "30d": 2_592_000_000 };
+const store = {
+  load(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+  },
+  save(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ }
+  },
+};
+const savedFilters = store.load("cwf-run-filters", {});
+const filters = {
+  statuses: Array.isArray(savedFilters.statuses)
+    ? savedFilters.statuses.filter((status) => STATUS_FILTERS.includes(status))
+    : [...STATUS_FILTERS],
+  launched: savedFilters.launched in LAUNCHED_WINDOWS ? savedFilters.launched : "all",
+};
+let pins = store.load("cwf-run-pins", []);
+if (!Array.isArray(pins)) pins = [];
+
+const filtersActive = () => filters.launched !== "all" || filters.statuses.length < STATUS_FILTERS.length;
+
+function visibleRuns() {
+  const window = LAUNCHED_WINDOWS[filters.launched] ?? Number.POSITIVE_INFINITY;
+  const now = Date.now();
+  return runsCache.filter((run) => filters.statuses.includes(run.status) && now - +new Date(run.startedAt) <= window);
+}
+
+function buildFilterBar() {
+  $("status-filters").innerHTML = STATUS_FILTERS.map((status) => `<button class="chip" type="button"
+      data-status="${status}" aria-pressed="${filters.statuses.includes(status)}">
+    <span class="dot ${status}" aria-hidden="true"></span>${status}<span class="chip-count" data-count-for="${status}">0</span>
+  </button>`).join("");
+  $("launched-filter").value = filters.launched;
+}
+
+function updateFilterBar() {
+  const window = LAUNCHED_WINDOWS[filters.launched] ?? Number.POSITIVE_INFINITY;
+  const now = Date.now();
+  const pool = runsCache.filter((run) => now - +new Date(run.startedAt) <= window);
+  for (const status of STATUS_FILTERS) {
+    const count = $("status-filters").querySelector(`[data-count-for="${status}"]`);
+    if (count) count.textContent = pool.filter((run) => run.status === status).length;
+  }
+  const total = runsCache.length;
+  $("side-count").textContent = total ? (filtersActive() ? `${visibleRuns().length} of ${total}` : `${total}`) : "";
+  $("filters-reset").hidden = !filtersActive();
+}
+
+function resetFilters() {
+  filters.statuses = [...STATUS_FILTERS];
+  filters.launched = "all";
+  store.save("cwf-run-filters", filters);
+  buildFilterBar();
+  renderRunsList();
+}
+
+function togglePin(runId) {
+  pins = pins.includes(runId) ? pins.filter((id) => id !== runId) : [runId, ...pins];
+  store.save("cwf-run-pins", pins);
+  renderRunsList();
+}
 
 async function fetchJson(url) {
   const response = await fetch(url);
@@ -1115,24 +1324,41 @@ function agentTone(agent) {
 
 function runItem(run) {
   const live = run.status === "running" ? activeAgents.filter((agent) => agent.runId === run.runId) : [];
+  const pinned = pins.includes(run.runId);
+  const selected = run.runId === selectedRunId;
   return `
-    <button class="run-item ${run.runId === selectedRunId ? "selected" : ""}" type="button" data-run="${esc(run.runId)}">
-      <span class="name"><span class="dot ${esc(run.status)}"></span>${esc(run.name ?? run.runId)}</span>
-      <span class="sub">${pill(run.status)} · ${fmtTime(run.startedAt)}</span>
-      <span class="sub mono">${esc(run.runId.slice(0, 14))}… · ${run.stats ? `${run.stats.completed}✓ ${run.stats.failed}× ${run.stats.cached}↻` : ""}</span>
-      ${live.map((agent) => `<span class="live" title="${esc(agent.activity?.text ?? agent.key)}">
-        <span class="dot running"></span><span>${esc(agent.label)}</span><span class="doing">${esc(nowLine(agent.activity))}</span>
-      </span>`).join("")}
-    </button>`;
+    <div class="run-item ${selected ? "selected" : ""}">
+      <button class="run-main" type="button" data-run="${esc(run.runId)}" ${selected ? 'aria-current="true"' : ""}>
+        <span class="name"><span class="dot ${esc(run.status)}"></span>${esc(run.name ?? run.runId)}</span>
+        <span class="sub">${pill(run.status)} · ${fmtTime(run.startedAt)}</span>
+        <span class="sub mono">${esc(run.runId.slice(0, 14))}… · ${run.stats ? `${run.stats.completed}✓ ${run.stats.failed}× ${run.stats.cached}↻` : ""}</span>
+        ${live.map((agent) => `<span class="live" title="${esc(agent.activity?.text ?? agent.key)}">
+          <span class="dot running"></span><span>${esc(agent.label)}</span><span class="doing">${esc(nowLine(agent.activity))}</span>
+        </span>`).join("")}
+      </button>
+      <button class="run-pin" type="button" data-pin="${esc(run.runId)}" aria-pressed="${pinned}"
+          title="${pinned ? "Unpin" : "Pin"} run" aria-label="${pinned ? "Unpin" : "Pin"} ${esc(run.name ?? run.runId)}">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h7A1.5 1.5 0 0 1 13 3.5v9.19a.75.75 0 0 1-1.172.62L8 10.51l-3.828 2.8A.75.75 0 0 1 3 12.69V3.5Z"/></svg>
+        <span class="hit" aria-hidden="true"></span>
+      </button>
+    </div>`;
 }
 
 function renderRunsList() {
-  const running = runsCache.filter((run) => run.status === "running");
-  const rest = runsCache.filter((run) => run.status !== "running");
+  const pinSet = new Set(pins);
+  const visible = visibleRuns();
+  const pinned = visible.filter((run) => pinSet.has(run.runId));
+  const unpinned = visible.filter((run) => !pinSet.has(run.runId));
+  const running = unpinned.filter((run) => run.status === "running");
+  const rest = unpinned.filter((run) => run.status !== "running");
   $("runs").innerHTML = [
+    pinned.length ? `<div class="side-h">Pinned</div>${pinned.map(runItem).join("")}` : "",
     running.length ? `<div class="side-h">Running</div>${running.map(runItem).join("")}` : "",
-    rest.length ? `<div class="side-h">${running.length ? "History" : "Runs"}</div>${rest.map(runItem).join("")}` : "",
-  ].join("") || `<div class="empty">No runs yet.</div>`;
+    rest.length ? `<div class="side-h">${pinned.length || running.length ? "History" : "Runs"}</div>${rest.map(runItem).join("")}` : "",
+  ].join("") || (runsCache.length
+    ? `<div class="empty">No runs match these filters.<br /><button class="side-reset" type="button" data-clear-filters>Clear filters</button></div>`
+    : `<div class="empty">No runs yet.</div>`);
+  updateFilterBar();
 }
 
 function computeStructureKey(run, agents, journal) {
@@ -1375,7 +1601,8 @@ async function refreshRuns() {
     runsCache = payload.runs;
     $("root").textContent = payload.root;
     if (!selectedRunId && runsCache.length) {
-      selectedRunId = (runsCache.find((run) => run.status === "running") ?? runsCache[0]).runId;
+      const visible = visibleRuns();
+      selectedRunId = (visible.find((run) => run.status === "running") ?? visible[0] ?? runsCache[0]).runId;
       await refreshDetail();
     }
     renderRunsList();
@@ -1408,6 +1635,15 @@ async function refreshActive() {
 }
 
 document.addEventListener("click", (event) => {
+  const pinButton = event.target.closest("[data-pin]");
+  if (pinButton) {
+    togglePin(pinButton.dataset.pin);
+    return;
+  }
+  if (event.target.closest("[data-clear-filters]")) {
+    resetFilters();
+    return;
+  }
   const runButton = event.target.closest("[data-run]");
   if (runButton) {
     selectedRunId = runButton.dataset.run;
@@ -1555,6 +1791,25 @@ $("backdrop").onclick = closeDrawer;
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeDrawer(); });
 window.addEventListener("resize", () => requestAnimationFrame(drawConnectors));
 
+$("status-filters").addEventListener("click", (event) => {
+  const chip = event.target.closest("[data-status]");
+  if (!chip) return;
+  const status = chip.dataset.status;
+  filters.statuses = filters.statuses.includes(status)
+    ? filters.statuses.filter((item) => item !== status)
+    : [...filters.statuses, status];
+  chip.setAttribute("aria-pressed", String(filters.statuses.includes(status)));
+  store.save("cwf-run-filters", filters);
+  renderRunsList();
+});
+$("launched-filter").addEventListener("change", (event) => {
+  filters.launched = event.target.value in LAUNCHED_WINDOWS ? event.target.value : "all";
+  store.save("cwf-run-filters", filters);
+  renderRunsList();
+});
+$("filters-reset").addEventListener("click", resetFilters);
+
+buildFilterBar();
 refreshRuns();
 refreshActive();
 setInterval(refreshRuns, 3000);
