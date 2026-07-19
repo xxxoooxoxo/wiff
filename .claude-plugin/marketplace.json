@@ -8,7 +8,7 @@
     {
       "name": "wiff",
       "source": "./plugins/wiff",
-      "description": "Deterministic, resumable JavaScript workflows across Codex, Claude, and Cursor agents, with journaled resume and worktree isolation.",
+      "description": "Deterministic, resumable JavaScript workflows across Codex, Claude, Cursor, and Kimi agents, with journaled resume and worktree isolation.",
       "category": "workflow"
     }
   ]

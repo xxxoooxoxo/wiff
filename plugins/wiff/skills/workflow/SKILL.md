@@ -1,6 +1,6 @@
 ---
 name: workflow
-description: Create, run, monitor, cancel, or resume deterministic JavaScript workflows that orchestrate multiple Codex, Claude, or Cursor agents. Use for parallel investigation or review, staged agent pipelines, resumable long-running work, or when the user explicitly asks for a workflow, orchestration, fan-out, or several independent agents.
+description: Create, run, monitor, cancel, or resume deterministic JavaScript workflows that orchestrate multiple Codex, Claude, Cursor, or Kimi agents. Use for parallel investigation or review, staged agent pipelines, resumable long-running work, or when the user explicitly asks for a workflow, orchestration, fan-out, or several independent agents.
 ---
 
 # wiff
@@ -23,7 +23,7 @@ Read [references/api.md](references/api.md) before authoring a non-trivial workf
 
 - Run independent analysis with `sandbox: "read-only"` in parallel.
 - Serialize agents writing to one checkout, or give concurrent writers `isolation: "worktree"`.
-- Claude and Cursor `workspace-write` agents require `isolation: "worktree"`.
+- Claude, Cursor, and Kimi `workspace-write` agents require `isolation: "worktree"`.
 - Do not treat a failed agent as success. `parallel()` and `pipeline()` fail the run unless the script explicitly uses `parallelSettled()` and handles every rejection.
 - Prefer `gpt-5.6-sol`; use high or xhigh effort for review and work that must be correct unsupervised.
 - Do not leave a launched workflow unwatched. Wait for a terminal result or cancel it.

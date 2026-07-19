@@ -1,6 +1,7 @@
 import { ClaudeBackend } from "./claude.mjs";
 import { CodexBackend } from "./codex.mjs";
 import { CursorBackend } from "./cursor.mjs";
+import { KimiBackend } from "./kimi.mjs";
 
 /**
  * Backend contract
@@ -47,12 +48,14 @@ const PROVIDER_FACTORIES = {
   codex: () => new CodexBackend(),
   claude: () => new ClaudeBackend(),
   cursor: () => new CursorBackend(),
+  kimi: () => new KimiBackend(),
 };
 
 const MODEL_PROVIDER_PATTERNS = [
   [/^(claude|opus|sonnet|haiku|fable)/i, "claude"],
   [/^(gpt|codex|o\d)/i, "codex"],
   [/^(composer|cursor)/i, "cursor"],
+  [/^kimi/i, "kimi"],
   [/^gemini/i, "gemini"],
 ];
 
@@ -77,7 +80,7 @@ function defaultProviderFromEnv() {
  * Provider resolution order:
  *   1. options.provider (explicit per-agent or persona override)
  *   2. options.model prefix (gpt-*\/o* -> codex, claude-*\/opus\/... -> claude,
- *      composer-* -> cursor)
+ *      composer-* -> cursor, kimi-code/* -> kimi)
  *   3. WIFF_BACKEND environment variable
  *   4. "codex"
  */
@@ -150,3 +153,4 @@ export class BackendRouter {
 export { ClaudeBackend } from "./claude.mjs";
 export { CodexBackend, AppServerClient } from "./codex.mjs";
 export { CursorBackend } from "./cursor.mjs";
+export { KimiBackend } from "./kimi.mjs";

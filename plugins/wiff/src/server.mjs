@@ -85,7 +85,7 @@ const tools = [
     name: "workflow_models",
     title: "List Workflow Agent Models",
     description:
-      "List the models each agent backend (codex, claude, cursor) can run, with supported reasoning efforts. Backends that are unavailable on this machine report an error instead of models.",
+      "List the models each agent backend (codex, claude, cursor, kimi) can run, with supported reasoning efforts. Backends that are unavailable on this machine report an error instead of models.",
     inputSchema: {
       type: "object",
       properties: {},

@@ -4,7 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/%40xxxoooxoxo%2Fwiff?label=npm&color=cb3837)](https://www.npmjs.com/package/@xxxoooxoxo/wiff) [![MCP Registry](https://img.shields.io/badge/MCP_Registry-io.github.xxxoooxoxo%2Fwiff-6b46c1)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.xxxoooxoxo/wiff) ![MIT License](https://img.shields.io/badge/license-MIT-blue) ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
 
-Fan a task out to a fleet of agents with a small script instead of a prayer. You write ordinary JavaScript with `agent()`, `parallel()`, and `pipeline()`; the runtime executes it in the background, journals every step, and — when a run dies halfway through — resumes it without re-paying for a single completed agent. The engine is a plain MCP server with durable on-disk state, so the same run can be started, watched, resumed, or cancelled from **any** MCP client — Codex, Claude Code, Cursor, or a cron job — while each child runs on Codex, Claude, or Cursor.
+Fan a task out to a fleet of agents with a small script instead of a prayer. You write ordinary JavaScript with `agent()`, `parallel()`, and `pipeline()`; the runtime executes it in the background, journals every step, and — when a run dies halfway through — resumes it without re-paying for a single completed agent. The engine is a plain MCP server with durable on-disk state, so the same run can be started, watched, resumed, or cancelled from **any** MCP client — Codex, Claude Code, Cursor, or a cron job — while each child runs on Codex, Claude, Cursor, or Kimi.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/run-light.png">
@@ -108,14 +108,16 @@ and the workers are pluggable** — whoever drives, each `agent()` child runs on
 from its model name: `gpt-*`/`o*` models run as native Codex threads via a local
 `codex app-server`, `claude-*`/`opus`/`sonnet`/`haiku`/`fable` models run as headless `claude`
 agents, `composer-*` models run through the official Cursor SDK (`@cursor/sdk`) in-process, and
-a workflow can mix them freely (`provider: "codex" | "claude" | "cursor"` overrides the
-inference, `WIFF_BACKEND` sets the fallback for unrecognized models). On the Claude and Cursor
-backends, `sandbox` is enforced by permission policy instead of the OS, so `workspace-write`
-requires `isolation: "worktree"`.
+`kimi-code/*` models run as headless `kimi` processes. A workflow can mix them freely
+(`provider: "codex" | "claude" | "cursor" | "kimi"` overrides the inference, `WIFF_BACKEND`
+sets the fallback for unrecognized models). On the Claude, Cursor, and Kimi backends,
+`workspace-write` requires `isolation: "worktree"`; Kimi's `read-only` mode is advisory because
+print mode auto-approves tools and has no OS sandbox.
 
 Requirements on the machine, regardless of harness: Node >= 22, git if you use
 `isolation: "worktree"`, and the runtime of whichever backend your agents use — the `codex`
-and/or `claude` CLI installed and authenticated, or `CURSOR_API_KEY` for Cursor agents.
+and/or `claude` CLI installed and authenticated, `CURSOR_API_KEY` for Cursor agents, or the
+`kimi` CLI configured with the requested full model alias (for example `kimi-code/k3`).
 
 **Claude Code** — the plugin install above is the easy path. To wire just the server manually:
 
@@ -166,7 +168,7 @@ If you are a coding agent — driving wiff over MCP or hacking on this repo — 
 
 ## How it works
 
-The plugin is an MCP server exposing five tools: `workflow_start`, `workflow_status`, `workflow_wait`, `workflow_cancel`, and `workflow_models`. A started workflow runs its script inside a locked-down Node `vm` (no imports, filesystem, shell, network, time, or randomness — those all throw). Each `agent()` call is routed to the Codex, Claude, or Cursor backend from its model name or explicit `provider`; recursive orchestration is disabled inside children.
+The plugin is an MCP server exposing five tools: `workflow_start`, `workflow_status`, `workflow_wait`, `workflow_cancel`, and `workflow_models`. A started workflow runs its script inside a locked-down Node `vm` (no imports, filesystem, shell, network, time, or randomness — those all throw). Each `agent()` call is routed to the Codex, Claude, Cursor, or Kimi backend from its model name or explicit `provider`; recursive orchestration is disabled inside children.
 
 Everything about a run persists under `~/.wiff/runs/<runId>/`:
 

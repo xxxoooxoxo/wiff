@@ -87,6 +87,8 @@ test("inferProvider maps model prefixes", () => {
   assert.equal(inferProvider("claude-opus-4-8"), "claude");
   assert.equal(inferProvider("opus"), "claude");
   assert.equal(inferProvider("fable"), "claude");
+  assert.equal(inferProvider("kimi-code/k3"), "kimi");
+  assert.equal(inferProvider("KIMI-CODE/kimi-for-coding"), "kimi");
   assert.equal(inferProvider("gemini-2.5-pro"), "gemini");
   assert.equal(inferProvider("mystery-model"), null);
   assert.equal(inferProvider(undefined), null);
@@ -112,17 +114,18 @@ test("router picks backends by provider, model prefix, then default", async () =
   };
   const router = new BackendRouter({
     defaultProvider: "codex",
-    factories: { codex: fake("codex"), claude: fake("claude") },
+    factories: { codex: fake("codex"), claude: fake("claude"), kimi: fake("kimi") },
   });
 
   assert.equal((await router.runAgent({ options: { model: "gpt-5.6-sol" } })).result, "codex-result");
   assert.equal((await router.runAgent({ options: { model: "claude-opus-4-8" } })).result, "claude-result");
+  assert.equal((await router.runAgent({ options: { model: "kimi-code/k3" } })).result, "kimi-result");
   assert.equal(
     (await router.runAgent({ options: { model: "gpt-5.6-sol", provider: "claude" } })).result,
     "claude-result",
   );
   assert.equal((await router.runAgent({ options: { model: "mystery-model" } })).result, "codex-result");
-  assert.equal(created.length, 2, "backends are lazily created once per provider");
+  assert.equal(created.length, 3, "backends are lazily created once per provider");
 
   await assert.rejects(
     router.runAgent({ options: { model: "gemini-2.5-pro" } }),

@@ -40,8 +40,8 @@ Options:
 
 - `key`: stable resume/cache key. Strongly recommended.
 - `label`: human-readable activity label.
-- `model`: model id. Defaults to `gpt-5.6-sol` (override with `WIFF_DEFAULT_MODEL`). The model prefix picks the backend: `gpt-*`/`o*`/`codex*` run on Codex, `claude-*`/`opus`/`sonnet`/`haiku`/`fable` run on Claude Code, `composer-*` runs on Cursor.
-- `provider`: explicit backend (`codex`, `claude`, or `cursor`), overriding model-prefix inference.
+- `model`: model id. Defaults to `gpt-5.6-sol` (override with `WIFF_DEFAULT_MODEL`). The model prefix picks the backend: `gpt-*`/`o*`/`codex*` run on Codex, `claude-*`/`opus`/`sonnet`/`haiku`/`fable` run on Claude Code, `composer-*` runs on Cursor, and `kimi-code/*` runs on Kimi.
+- `provider`: explicit backend (`codex`, `claude`, `cursor`, or `kimi`), overriding model-prefix inference.
 - `effort`: reasoning effort. Defaults to `high`.
 - `sandbox`: `read-only`, `workspace-write`, or `danger-full-access`. Defaults to `read-only`.
 - `schema`: JSON Schema for the final response.
@@ -80,6 +80,13 @@ Agents run on a pluggable backend selected per call: explicit `provider` option,
   sandbox only gates command execution: `read-only` is advisory (sandbox on plus a do-not-write
   instruction), `workspace-write` requires `isolation: "worktree"` like the claude backend,
   and `danger-full-access` disables the sandbox. `effort` is ignored.
+- **kimi** — one headless `kimi -p` process per agent, using full configured model aliases such
+  as `kimi-code/k3`. The CLI has no system-prompt channel or native structured output, so personas
+  are prepended to the prompt, the schema-only directive is appended after the task, and schema
+  results are parsed from the final message. Print mode auto-approves every tool and has no OS
+  sandbox: `read-only` is advisory only,
+  `workspace-write` **requires `isolation: "worktree"`**, and `danger-full-access` runs as-is.
+  `effort` is accepted but ignored because thinking effort comes from the CLI's `config.toml`.
 
 ### `parallel(thunks, options?)`
 
