@@ -1,17 +1,26 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { WorkflowManager } from "../src/runtime.mjs";
+import { atomicWriteJson, hashValue } from "../src/util.mjs";
 
 const execFileAsync = promisify(execFile);
 const TERMINAL = new Set(["completed", "failed", "cancelled", "interrupted"]);
 
 class FakeBackend {
   calls = [];
+  #releaseBlockedAgent;
+  #blockedAgent = new Promise((resolve) => {
+    this.#releaseBlockedAgent = resolve;
+  });
+
+  releaseBlockedAgent() {
+    this.#releaseBlockedAgent();
+  }
 
   async runAgent({ prompt, options, instructions, signal, onEvent }) {
     const call = { prompt, options, instructions };
@@ -30,6 +39,7 @@ class FakeBackend {
         method: "item/completed",
         params: { item: { type: "commandExecution", command: "echo checkpoint-alpha" } },
       });
+      call.checkpointed = true;
       await hang();
     }
     if (prompt.startsWith("WRITE-WAIT:")) {
@@ -39,10 +49,17 @@ class FakeBackend {
         method: "item/completed",
         params: { item: { type: "fileChange", changes: [{ path: name }] } },
       });
+      call.checkpointed = true;
       await hang();
     }
     if (prompt === "SLOW") {
       await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    if (prompt === "SLOW-LONG") {
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+    }
+    if (prompt === "BLOCK") {
+      await this.#blockedAgent;
     }
     if (prompt.startsWith("FAIL")) throw new Error(prompt);
     const result = options.schema
@@ -100,6 +117,35 @@ async function waitForTerminal(manager, runId) {
   return run;
 }
 
+async function rewriteJournalAsLegacy(run, prompt, optionOverrides = {}) {
+  const events = (await readFile(run.journalPath, "utf8"))
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  const started = events.find((event) => event.type === "agent.started");
+  const legacyOptions = {
+    ...started.options,
+    effort: optionOverrides.effort ?? "high",
+    timeoutMs: optionOverrides.timeoutMs ?? 30 * 60 * 1_000,
+  };
+  const legacyInputHash = hashValue({ prompt, options: legacyOptions });
+  const legacyEvents = events
+    .filter((event) => event.type !== "agent.queued")
+    .map((event) => {
+      if (event.inputHash) event.inputHash = legacyInputHash;
+      delete event.queuedAt;
+      delete event.queueMs;
+      delete event.executionMs;
+      if (event.type !== "agent.started") delete event.startedAt;
+      if (event.type === "agent.started") event.options = legacyOptions;
+      return event;
+    });
+  await writeFile(
+    run.journalPath,
+    `${legacyEvents.map((event) => JSON.stringify(event)).join("\n")}\n`,
+  );
+}
+
 test("runs parallel agents and a sequential pipeline", async () => {
   await withManager(async ({ manager, backend }) => {
     const script = `
@@ -131,7 +177,159 @@ test("runs parallel agents and a sequential pipeline", async () => {
     assert.equal(backend.calls.length, 4);
     assert.equal(run.stats.completed, 4);
     assert.equal(run.stats.failed, 0);
+    assert.equal(backend.calls[0].options.effort, "medium");
+    assert.equal(backend.calls[0].options.timeoutMs, 10 * 60 * 1_000);
   });
+});
+
+test("journals queued and executing time separately", async () => {
+  await withManager(
+    async ({ manager, backend }) => {
+      const script = `
+        export const meta = { name: "queue-telemetry", description: "Measure queue time separately" };
+        return await parallel([
+          () => agent("BLOCK", { key: "blocked" }),
+          () => agent("fast", { key: "fast" }),
+        ]);
+      `;
+      const started = await manager.start({ script, cwd: process.cwd() });
+      let snapshot = await manager.status(started.runId);
+      const deadline = Date.now() + 5_000;
+      while (snapshot.stats.queued !== 1 || snapshot.stats.running !== 1) {
+        assert.ok(Date.now() < deadline, "timed out waiting for one queued and one running agent");
+        snapshot = await manager.wait(started.runId, 1_000);
+      }
+      assert.equal(snapshot.stats.queued, 1);
+      assert.equal(snapshot.stats.running, 1);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      backend.releaseBlockedAgent();
+      const run = await waitForTerminal(manager, started.runId);
+      assert.equal(run.status, "completed");
+      assert.equal(run.stats.queued, 0);
+      assert.equal(run.stats.running, 0);
+
+      const journal = (await readFile(run.journalPath, "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      const queued = journal.filter((event) => event.type === "agent.queued");
+      const executing = journal.filter((event) => event.type === "agent.started");
+      const completed = journal.filter((event) => event.type === "agent.completed");
+      assert.equal(queued.length, 2);
+      assert.equal(executing.length, 2);
+      assert.equal(completed.length, 2);
+      assert.ok(Math.max(...executing.map((event) => event.queueMs)) >= 25);
+      assert.ok(completed.every((event) => event.executionMs >= 0));
+    },
+    { maxConcurrency: 1 },
+  );
+});
+
+test("agent turn timeout starts after the concurrency queue", async () => {
+  await withManager(
+    async ({ manager }) => {
+      const script = `
+        export const meta = { name: "queue-timeout", description: "Exclude queue time from turn timeout" };
+        return await parallel([
+          () => agent("SLOW-LONG", { key: "slow" }),
+          () => agent("fast", { key: "fast", timeoutMs: 1000 }),
+        ]);
+      `;
+      const run = await waitForTerminal(
+        manager,
+        (await manager.start({ script, cwd: process.cwd() })).runId,
+      );
+      assert.equal(run.status, "completed");
+      assert.deepEqual(run.result, ["result:SLOW-LONG", "result:fast"]);
+    },
+    { maxConcurrency: 1 },
+  );
+});
+
+test("owner heartbeat refreshes while a workflow is live", async () => {
+  await withManager(
+    async ({ manager }) => {
+      const started = await manager.start({
+        cwd: process.cwd(),
+        script: `
+          export const meta = { name: "heartbeat", description: "Publish owner liveness" };
+          return await agent("WAIT", { key: "wait", timeoutMs: 60000 });
+        `,
+      });
+      const first = await manager.status(started.runId);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      const second = await manager.status(started.runId);
+      assert.equal(second.status, "running");
+      assert.equal(second.ownerResponsive, true);
+      assert.ok(Date.parse(second.ownerHeartbeatAt) > Date.parse(first.ownerHeartbeatAt));
+      await manager.cancel(started.runId);
+    },
+    { heartbeatIntervalMs: 20, heartbeatStaleMs: 100 },
+  );
+});
+
+test("a stale heartbeat reports an unresponsive but non-terminal owner", async () => {
+  await withManager(
+    async ({ manager }) => {
+      const started = await manager.start({
+        cwd: process.cwd(),
+        script: `
+          export const meta = { name: "stalled", description: "Expose a stale owner heartbeat" };
+          return await agent("WAIT", { key: "wait", timeoutMs: 60000 });
+        `,
+      });
+      let run = await manager.status(started.runId);
+      while (run.stats.running === 0) run = await manager.wait(started.runId, 100);
+      const record = JSON.parse(await readFile(run.runPath, "utf8"));
+      record.ownerHeartbeatAt = new Date(Date.now() - 5_000).toISOString();
+      await writeFile(run.runPath, JSON.stringify(record));
+
+      const stalled = await manager.status(started.runId);
+      assert.equal(stalled.status, "running");
+      assert.equal(stalled.ownerAlive, true);
+      assert.equal(stalled.ownerResponsive, false);
+      assert.ok(stalled.heartbeatAgeMs >= 5_000);
+      await manager.cancel(started.runId);
+    },
+    { heartbeatIntervalMs: 1_000, heartbeatStaleMs: 2_000 },
+  );
+});
+
+test("heartbeat persistence tolerates transient write failures", async () => {
+  let heartbeatFailures = 0;
+  const writeRun = async (filePath, snapshot) => {
+    const heartbeatOnly =
+      snapshot.status === "running" &&
+      Date.parse(snapshot.ownerHeartbeatAt) > Date.parse(snapshot.updatedAt);
+    if (heartbeatOnly && heartbeatFailures < 2) {
+      heartbeatFailures += 1;
+      throw new Error("transient heartbeat write failure");
+    }
+    await atomicWriteJson(filePath, snapshot);
+  };
+  await withManager(
+    async ({ manager }) => {
+      const started = await manager.start({
+        cwd: process.cwd(),
+        script: `
+          export const meta = { name: "heartbeat-retry", description: "Tolerate transient writes" };
+          return await agent("WAIT", { key: "wait", timeoutMs: 60000 });
+        `,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const run = await manager.status(started.runId);
+      assert.equal(heartbeatFailures, 2);
+      assert.equal(run.status, "running");
+      assert.equal(run.ownerResponsive, true);
+      await manager.cancel(started.runId);
+    },
+    {
+      heartbeatIntervalMs: 20,
+      heartbeatStaleMs: 100,
+      heartbeatFailureLimit: 3,
+      writeRun,
+    },
+  );
 });
 
 test("normalizes the provider option and passes it to the backend", async () => {
@@ -209,6 +407,52 @@ test("resume replays successful unchanged agent calls", async () => {
   });
 });
 
+test("resume accepts a pre-0.6.1 completed-agent journal", async () => {
+  await withManager(async ({ manager, backend }) => {
+    const script = `
+      export const meta = { name: "legacy-resume", description: "Replay a legacy default hash" };
+      return await agent("legacy cached work", { key: "stable-key" });
+    `;
+    const started = await manager.start({ script, cwd: process.cwd() });
+    const first = await waitForTerminal(manager, started.runId);
+    assert.equal(first.status, "completed");
+    await rewriteJournalAsLegacy(first, "legacy cached work");
+
+    const resumed = await manager.start({ resumeFromRunId: started.runId });
+    const second = await waitForTerminal(manager, resumed.runId);
+    assert.equal(second.status, "completed");
+    assert.equal(second.stats.cached, 1);
+    assert.equal(backend.calls.length, 1);
+  });
+});
+
+test("changing only timeoutMs does not invalidate a completed agent", async () => {
+  await withManager(async ({ manager, backend }) => {
+    const source = (timeoutMs) => `
+      export const meta = { name: "timeout-cache", description: "Keep operational timeout out of the cache key" };
+      return await agent("stable work", {
+        key: "stable-key", effort: "medium", timeoutMs: ${timeoutMs},
+      });
+    `;
+    const first = await waitForTerminal(
+      manager,
+      (await manager.start({ script: source(1_000), cwd: process.cwd() })).runId,
+    );
+    await rewriteJournalAsLegacy(first, "stable work", {
+      effort: "medium",
+      timeoutMs: 1_000,
+    });
+    const resumed = await manager.start({
+      resumeFromRunId: first.runId,
+      script: source(2_000),
+    });
+    const second = await waitForTerminal(manager, resumed.runId);
+    assert.equal(second.status, "completed");
+    assert.equal(second.stats.cached, 1);
+    assert.equal(backend.calls.length, 1);
+  });
+});
+
 test("cancel aborts a live agent and marks the run cancelled", async () => {
   await withManager(async ({ manager }) => {
     const script = `
@@ -224,6 +468,37 @@ test("cancel aborts a live agent and marks the run cancelled", async () => {
     assert.equal(cancelled.status, "cancelled");
     assert.match(cancelled.error.message, /cancelled|shutting down/i);
   });
+});
+
+test("cancel drains both queued and executing agents", async () => {
+  await withManager(
+    async ({ manager }) => {
+      const started = await manager.start({
+        cwd: process.cwd(),
+        script: `
+          export const meta = { name: "cancel-queue", description: "Cancel every scheduler state" };
+          return await parallel([
+            () => agent("WAIT", { key: "executing", timeoutMs: 60000 }),
+            () => agent("fast", { key: "queued", timeoutMs: 60000 }),
+          ]);
+        `,
+      });
+      let run = await manager.status(started.runId);
+      while (
+        !TERMINAL.has(run.status) &&
+        (run.stats.queued !== 1 || run.stats.running !== 1)
+      ) {
+        run = await manager.wait(started.runId, 1_000);
+      }
+      assert.equal(run.stats.queued, 1);
+      assert.equal(run.stats.running, 1);
+      const cancelled = await manager.cancel(started.runId);
+      assert.equal(cancelled.status, "cancelled");
+      assert.equal(cancelled.stats.queued, 0);
+      assert.equal(cancelled.stats.running, 0);
+    },
+    { maxConcurrency: 1 },
+  );
 });
 
 test("a second manager observes a live owner without interrupting it", async () => {
@@ -474,8 +749,9 @@ test("interrupted agents resume mid-turn with a transcript digest injected", asy
       return await agent("WAIT", { key: "w", timeoutMs: 60000 });
     `;
     const started = await manager.start({ script, cwd: process.cwd() });
-    while (backend.calls.length === 0) await new Promise((r) => setTimeout(r, 20));
-    await manager.cancel(started.runId);
+    while (backend.calls[0]?.checkpointed !== true) await new Promise((r) => setTimeout(r, 20));
+    const interrupted = await manager.cancel(started.runId);
+    await rewriteJournalAsLegacy(interrupted, "WAIT", { timeoutMs: 60_000 });
 
     const resumed = await manager.start({ resumeFromRunId: started.runId });
     const final = await waitForTerminal(manager, resumed.runId);
@@ -500,7 +776,7 @@ test("mid-turn resume reuses the interrupted attempt's worktree", async () => {
         });
       `;
       const started = await manager.start({ script, cwd: repo });
-      while (backend.calls.length === 0) await new Promise((r) => setTimeout(r, 20));
+      while (backend.calls[0]?.checkpointed !== true) await new Promise((r) => setTimeout(r, 20));
       await manager.cancel(started.runId);
 
       const resumed = await manager.start({ resumeFromRunId: started.runId });

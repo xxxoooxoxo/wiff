@@ -15,11 +15,14 @@ npx -p @xxxoooxoxo/wiff wiff-viewer       # live web viewer on http://127.0.0.1:
 ```
 
 Requires Node >= 22, git for `isolation: "worktree"`, and the runtime of whichever backend
-your agents use: the `codex` CLI for `gpt-*`/`o*` models (the default), the `claude` CLI for
+your agents use: Codex CLI >= 0.144.6 for `gpt-*`/`o*` models (the default), the `claude` CLI for
 `claude-*`/`opus`/`sonnet`/`haiku`/`fable` models, or `CURSOR_API_KEY` plus the bundled
 `@cursor/sdk` for `composer-*` models, or the `kimi` CLI for `kimi-code/*` models. Set
 `WIFF_BACKEND` to route unrecognized models to a specific backend, and `WIFF_DEFAULT_MODEL`
-to change the default model.
+to change the default model. Agent calls default to medium reasoning effort and a 10-minute
+execution timeout; time waiting for a concurrency slot is tracked separately. Wiff-launched
+Codex children disable plugins, apps, and configured MCP servers only inside their app-server
+process so normal interactive Codex configuration is unchanged.
 
 Full documentation, the workflow script contract, and Codex/Claude Code plugin installs:
 **https://github.com/xxxoooxoxo/wiff**

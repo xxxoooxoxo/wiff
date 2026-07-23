@@ -1,6 +1,6 @@
 {
   "name": "@xxxoooxoxo/wiff",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "mcpName": "io.github.xxxoooxoxo/wiff",
   "description": "Deterministic, resumable multi-agent workflows \u2014 a harness-agnostic MCP server that orchestrates Codex, Claude, Cursor, and Kimi agents from plain JavaScript, with journaled resume, git worktree isolation, and personas.",
   "type": "module",
@@ -42,7 +42,7 @@
     "access": "public"
   },
   "scripts": {
-    "check": "node --check src/server.mjs && node --check src/runtime.mjs && node --check src/app-server-client.mjs && node --check src/backends/index.mjs && node --check src/backends/codex.mjs && node --check src/backends/claude.mjs && node --check src/backends/cursor.mjs && node --check src/backends/kimi.mjs && node --check src/workflow-worker.mjs && node --check src/workflow-source.mjs && node --check src/semaphore.mjs && node --check src/util.mjs && node --check scripts/smoke.mjs",
+    "check": "node --check src/server.mjs && node --check src/runtime.mjs && node --check src/app-server-client.mjs && node --check src/backends/index.mjs && node --check src/backends/codex.mjs && node --check src/backends/claude.mjs && node --check src/backends/cursor.mjs && node --check src/backends/kimi.mjs && node --check src/workflow-worker.mjs && node --check src/workflow-source.mjs && node --check src/semaphore.mjs && node --check src/util.mjs && node --check scripts/smoke.mjs && node --check scripts/viewer.mjs",
     "smoke": "node scripts/smoke.mjs",
     "test": "node --test",
     "viewer": "node scripts/viewer.mjs"

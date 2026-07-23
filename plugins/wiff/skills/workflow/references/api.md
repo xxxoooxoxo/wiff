@@ -38,15 +38,19 @@ Start one child agent and return its final response. With `schema`, return parse
 
 Options:
 
-- `key`: stable resume/cache key. Strongly recommended.
+- `key`: stable resume/cache key. Strongly recommended. Execution-only controls such as
+  `timeoutMs` do not invalidate a completed result.
 - `label`: human-readable activity label.
 - `model`: model id. Defaults to `gpt-5.6-sol` (override with `WIFF_DEFAULT_MODEL`). The model prefix picks the backend: `gpt-*`/`o*`/`codex*` run on Codex, `claude-*`/`opus`/`sonnet`/`haiku`/`fable` run on Claude Code, `composer-*` runs on Cursor, and `kimi-code/*` runs on Kimi.
 - `provider`: explicit backend (`codex`, `claude`, `cursor`, or `kimi`), overriding model-prefix inference.
-- `effort`: reasoning effort. Defaults to `high`.
+- `effort`: reasoning effort. Defaults to `medium`. Prefer `low` for mechanical inventory,
+  `medium` for ordinary implementation, and reserve `high`/`xhigh` for the few review or
+  synthesis turns that need it.
 - `sandbox`: `read-only`, `workspace-write`, or `danger-full-access`. Defaults to `read-only`.
 - `schema`: JSON Schema for the final response.
 - `cwd`: absolute child working directory. Defaults to the run directory.
-- `timeoutMs`: child turn timeout. Defaults to 30 minutes.
+- `timeoutMs`: child execution timeout. Defaults to 10 minutes and starts only after the agent
+  acquires a runtime concurrency slot; queue time is recorded separately.
 - `isolation`: `"worktree"` runs the agent in a fresh detached git worktree of the run cwd's
   repository (created under the run directory). Clean worktrees are removed when the agent
   finishes; worktrees with uncommitted changes are kept and listed in the run's `worktrees`
@@ -64,8 +68,11 @@ Agents run on a pluggable backend selected per call: explicit `provider` option,
 `model` prefix, else `WIFF_BACKEND` (defaults to `codex`). Mixed-backend workflows just work —
 `model` is part of the cache key, so resume semantics are identical across backends.
 
-- **codex** — native Codex threads over one long-lived `codex app-server` process. `sandbox`
-  is OS-enforced; `schema` uses native structured output.
+- **codex** — native Codex threads over one long-lived `codex app-server` process. Before launch,
+  Wiff disables Codex plugins/apps, enumerates the remaining configured MCP servers, and disables
+  each one for the child app-server only. This avoids recursive/duplicated MCP process trees
+  without changing interactive Codex configuration. `sandbox` is OS-enforced; `schema` uses
+  native structured output. Requires Codex CLI >= 0.144.6.
 - **claude** — one headless `claude -p` process per agent (`--no-session-persistence`, user
   settings/hooks/MCP servers disabled). `schema` maps to native `--json-schema`; personas map
   to `--append-system-prompt`; `effort` maps directly (Claude additionally accepts `max`).
@@ -91,6 +98,10 @@ Agents run on a pluggable backend selected per call: explicit `provider` option,
 ### `parallel(thunks, options?)`
 
 Run zero-argument functions concurrently while preserving result order. The default concurrency is the runtime limit. Any rejection fails with `AggregateError`.
+Agents waiting for that limit emit `agent.queued`; `agent.started` means the backend turn is
+actually executing. Completion/failure events include `queueMs` and `executionMs`.
+Queue waits do not have an implicit deadline; cancel the workflow to release queued agents if
+executing backends stop making progress.
 
 ### `parallelSettled(thunks, options?)`
 
@@ -116,11 +127,15 @@ started but never completed re-run with recovery context injected automatically:
   to the new attempt instead of being recreated, so file work already done survives.
 - Cache keys are unaffected: the digest is injected after hashing, so a later resume
   still replays the completed result.
+- Journals created before 0.6.1 retain their legacy default-option hashes. Wiff accepts those
+  hashes during resume so upgrading does not replay completed agents or discard interrupted
+  transcripts/worktrees; newly executed turns use the current defaults.
 
 ## MCP tools
 
 - `workflow_start`: launch new work or resume an existing run.
-- `workflow_status`: read current run state.
+- `workflow_status`: read current run state, including `ownerResponsive` and `heartbeatAgeMs`
+  while a run is live. An unresponsive owner is reported without making the run terminal.
 - `workflow_wait`: wait up to 55 seconds for state to change or finish.
 - `workflow_cancel`: interrupt a live run.
 - `workflow_models`: list the models each backend can run (with supported reasoning efforts
