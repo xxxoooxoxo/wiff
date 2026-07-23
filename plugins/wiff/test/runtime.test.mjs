@@ -6,13 +6,21 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { WorkflowManager } from "../src/runtime.mjs";
-import { hashValue } from "../src/util.mjs";
+import { atomicWriteJson, hashValue } from "../src/util.mjs";
 
 const execFileAsync = promisify(execFile);
 const TERMINAL = new Set(["completed", "failed", "cancelled", "interrupted"]);
 
 class FakeBackend {
   calls = [];
+  #releaseBlockedAgent;
+  #blockedAgent = new Promise((resolve) => {
+    this.#releaseBlockedAgent = resolve;
+  });
+
+  releaseBlockedAgent() {
+    this.#releaseBlockedAgent();
+  }
 
   async runAgent({ prompt, options, instructions, signal, onEvent }) {
     const call = { prompt, options, instructions };
@@ -31,6 +39,7 @@ class FakeBackend {
         method: "item/completed",
         params: { item: { type: "commandExecution", command: "echo checkpoint-alpha" } },
       });
+      call.checkpointed = true;
       await hang();
     }
     if (prompt.startsWith("WRITE-WAIT:")) {
@@ -40,6 +49,7 @@ class FakeBackend {
         method: "item/completed",
         params: { item: { type: "fileChange", changes: [{ path: name }] } },
       });
+      call.checkpointed = true;
       await hang();
     }
     if (prompt === "SLOW") {
@@ -47,6 +57,9 @@ class FakeBackend {
     }
     if (prompt === "SLOW-LONG") {
       await new Promise((resolve) => setTimeout(resolve, 1_100));
+    }
+    if (prompt === "BLOCK") {
+      await this.#blockedAgent;
     }
     if (prompt.startsWith("FAIL")) throw new Error(prompt);
     const result = options.schema
@@ -171,24 +184,25 @@ test("runs parallel agents and a sequential pipeline", async () => {
 
 test("journals queued and executing time separately", async () => {
   await withManager(
-    async ({ manager }) => {
+    async ({ manager, backend }) => {
       const script = `
         export const meta = { name: "queue-telemetry", description: "Measure queue time separately" };
         return await parallel([
-          () => agent("SLOW", { key: "slow" }),
+          () => agent("BLOCK", { key: "blocked" }),
           () => agent("fast", { key: "fast" }),
         ]);
       `;
       const started = await manager.start({ script, cwd: process.cwd() });
       let snapshot = await manager.status(started.runId);
-      while (
-        !TERMINAL.has(snapshot.status) &&
-        (snapshot.stats.queued !== 1 || snapshot.stats.running !== 1)
-      ) {
+      const deadline = Date.now() + 5_000;
+      while (snapshot.stats.queued !== 1 || snapshot.stats.running !== 1) {
+        assert.ok(Date.now() < deadline, "timed out waiting for one queued and one running agent");
         snapshot = await manager.wait(started.runId, 1_000);
       }
       assert.equal(snapshot.stats.queued, 1);
       assert.equal(snapshot.stats.running, 1);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      backend.releaseBlockedAgent();
       const run = await waitForTerminal(manager, started.runId);
       assert.equal(run.status, "completed");
       assert.equal(run.stats.queued, 0);
@@ -204,7 +218,7 @@ test("journals queued and executing time separately", async () => {
       assert.equal(queued.length, 2);
       assert.equal(executing.length, 2);
       assert.equal(completed.length, 2);
-      assert.ok(Math.max(...executing.map((event) => event.queueMs)) >= 250);
+      assert.ok(Math.max(...executing.map((event) => event.queueMs)) >= 25);
       assert.ok(completed.every((event) => event.executionMs >= 0));
     },
     { maxConcurrency: 1 },
@@ -291,7 +305,7 @@ test("heartbeat persistence tolerates transient write failures", async () => {
       heartbeatFailures += 1;
       throw new Error("transient heartbeat write failure");
     }
-    await writeFile(filePath, `${JSON.stringify(snapshot)}\n`);
+    await atomicWriteJson(filePath, snapshot);
   };
   await withManager(
     async ({ manager }) => {
@@ -735,7 +749,7 @@ test("interrupted agents resume mid-turn with a transcript digest injected", asy
       return await agent("WAIT", { key: "w", timeoutMs: 60000 });
     `;
     const started = await manager.start({ script, cwd: process.cwd() });
-    while (backend.calls.length === 0) await new Promise((r) => setTimeout(r, 20));
+    while (backend.calls[0]?.checkpointed !== true) await new Promise((r) => setTimeout(r, 20));
     const interrupted = await manager.cancel(started.runId);
     await rewriteJournalAsLegacy(interrupted, "WAIT", { timeoutMs: 60_000 });
 
@@ -762,7 +776,7 @@ test("mid-turn resume reuses the interrupted attempt's worktree", async () => {
         });
       `;
       const started = await manager.start({ script, cwd: repo });
-      while (backend.calls.length === 0) await new Promise((r) => setTimeout(r, 20));
+      while (backend.calls[0]?.checkpointed !== true) await new Promise((r) => setTimeout(r, 20));
       await manager.cancel(started.runId);
 
       const resumed = await manager.start({ resumeFromRunId: started.runId });
