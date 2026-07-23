@@ -25,7 +25,10 @@ Read [references/api.md](references/api.md) before authoring a non-trivial workf
 - Serialize agents writing to one checkout, or give concurrent writers `isolation: "worktree"`.
 - Claude, Cursor, and Kimi `workspace-write` agents require `isolation: "worktree"`.
 - Do not treat a failed agent as success. `parallel()` and `pipeline()` fail the run unless the script explicitly uses `parallelSettled()` and handles every rejection.
-- Prefer `gpt-5.6-sol`; use high or xhigh effort for review and work that must be correct unsupervised.
+- Prefer `gpt-5.6-sol`. Use low effort for mechanical inventory, medium for ordinary
+  implementation, and high or xhigh only for the few review or synthesis turns that need it.
+- Set a task-specific `timeoutMs` when 10 minutes is not appropriate. The timeout covers the
+  executing backend turn; time waiting for a concurrency slot is measured separately.
 - Do not leave a launched workflow unwatched. Wait for a terminal result or cancel it.
 
 ## Saved workflows

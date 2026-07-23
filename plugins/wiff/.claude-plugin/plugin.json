@@ -1,6 +1,6 @@
 {
   "name": "wiff",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Deterministic, resumable multi-agent workflows that orchestrate Codex, Claude, Cursor, and Kimi agents — five MCP tools plus the workflow-authoring skill.",
   "author": {
     "name": "Ali Hsareini",

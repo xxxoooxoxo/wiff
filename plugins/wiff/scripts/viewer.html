@@ -418,10 +418,11 @@
 
   .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
   .dot.running { background: var(--running); animation: pulse 1.4s ease-in-out infinite; }
+  .dot.queued { border: 1px solid var(--running); background: transparent; }
   .dot.completed { background: var(--good); }
   .dot.failed { background: var(--bad); }
   .dot.cached { background: var(--cached); }
-  .dot.cancelled, .dot.interrupted { background: var(--warn); }
+  .dot.cancelled, .dot.interrupted, .dot.stalled { background: var(--warn); }
   .dot.pending { border: 1px solid var(--pending); background: transparent; }
   .run-item .live .dot { width: 5px; height: 5px; }
   @keyframes pulse { 50% { opacity: .35; } }
@@ -439,9 +440,10 @@
     white-space: nowrap;
   }
   .pill.running { color: var(--running); background: var(--running-bg); }
+  .pill.queued { color: var(--running); background: var(--running-bg); }
   .pill.completed { color: var(--good); background: var(--good-bg); }
   .pill.failed { color: var(--bad); background: var(--bad-bg); }
-  .pill.cancelled, .pill.interrupted { color: var(--warn); background: var(--warn-bg); }
+  .pill.cancelled, .pill.interrupted, .pill.stalled { color: var(--warn); background: var(--warn-bg); }
   .pill.cached { color: var(--cached); background: var(--cached-bg); }
 
   .workflow-shell { width: min(100%, 1500px); margin-inline: auto; }
@@ -561,6 +563,10 @@
     stroke-dasharray: 7 7;
     animation: edge-flow 1.2s linear infinite;
   }
+  .flow-edge.queued {
+    stroke: color-mix(in srgb, var(--running) 34%, var(--edge));
+    stroke-dasharray: 3 8;
+  }
   @keyframes edge-flow { to { stroke-dashoffset: -14; } }
 
   .flow-grid {
@@ -650,6 +656,7 @@
   .agent-node:hover .agent-node-main { background: color-mix(in srgb, var(--node) 96%, var(--ink)); }
   .agent-node:disabled:hover .agent-node-main { background: var(--node); }
   .agent-node.running .agent-node-main { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 36%, var(--line)); }
+  .agent-node.queued .agent-node-main { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 20%, var(--line)); }
   .agent-node.failed .agent-node-main { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--bad) 38%, var(--line)); }
   .node-status {
     display: grid;
@@ -671,6 +678,10 @@
     border-color: var(--running);
     color: var(--running);
     animation: pulse 1.4s ease-in-out infinite;
+  }
+  .node-status.queued {
+    border-color: var(--running);
+    color: var(--running);
   }
   .node-label {
     min-width: 0;
@@ -1126,11 +1137,13 @@ const fmtDur = (ms) => {
 };
 const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString() : "");
 const fmtTokens = (number) => new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(number);
-const STATUS_ICON = { running: "•", completed: "✓", failed: "×", cached: "↻", cancelled: "–", interrupted: "Ⅱ", pending: "" };
+const STATUS_ICON = { queued: "…", running: "•", completed: "✓", failed: "×", cached: "↻", cancelled: "–", interrupted: "Ⅱ", stalled: "!", pending: "" };
 const KIND_ICON = { exec: "›", edit: "✎", thinking: "…", message: "·", search: "⌕", tool: "⌘" };
 const pill = (status) => `<span class="pill ${esc(status)}">${STATUS_ICON[status] ?? ""} ${esc(status)}</span>`;
 const nowLine = (activity) => (activity ? `${KIND_ICON[activity.kind] ?? "·"} ${activity.text}` : "");
 const slugify = (value) => String(value ?? "phase").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "phase";
+const displayRunStatus = (run) =>
+  run.status === "running" && run.ownerResponsive === false ? "stalled" : run.status;
 
 const STATUS_FILTERS = ["running", "completed", "failed", "cancelled", "interrupted"];
 const LAUNCHED_WINDOWS = { all: Number.POSITIVE_INFINITY, "24h": 86_400_000, "7d": 604_800_000, "30d": 2_592_000_000 };
@@ -1204,17 +1217,32 @@ async function fetchJson(url) {
 function deriveAgents(journal) {
   const byKey = new Map();
   for (const event of journal) {
-    if (event.type === "agent.started") {
+    if (event.type === "agent.queued") {
       byKey.set(event.key, {
         key: event.key,
         label: event.label ?? event.key,
         phase: event.phase ?? "default",
         sequence: event.sequence,
-        status: "running",
-        startedAt: event.at,
+        status: "queued",
+        queuedAt: event.at,
         options: event.options ?? {},
         transcript: event.transcriptPath?.split("/").pop(),
         worktreePath: event.worktreePath,
+      });
+    } else if (event.type === "agent.started") {
+      const queued = byKey.get(event.key);
+      byKey.set(event.key, {
+        key: event.key,
+        label: event.label ?? queued?.label ?? event.key,
+        phase: event.phase ?? queued?.phase ?? "default",
+        sequence: event.sequence ?? queued?.sequence,
+        status: "running",
+        queuedAt: event.queuedAt ?? queued?.queuedAt,
+        startedAt: event.at,
+        queueMs: event.queueMs,
+        options: event.options ?? queued?.options ?? {},
+        transcript: event.transcriptPath?.split("/").pop() ?? queued?.transcript,
+        worktreePath: event.worktreePath ?? queued?.worktreePath,
       });
     } else if (event.type === "agent.completed" || event.type === "agent.failed") {
       const row = byKey.get(event.key) ?? {
@@ -1226,6 +1254,10 @@ function deriveAgents(journal) {
       };
       row.status = event.type === "agent.completed" ? "completed" : "failed";
       row.endedAt = event.at;
+      row.queuedAt = event.queuedAt ?? row.queuedAt;
+      row.startedAt = event.startedAt ?? row.startedAt;
+      row.queueMs = event.queueMs ?? row.queueMs;
+      row.executionMs = event.executionMs;
       row.usage = event.usage;
       row.error = event.error?.message;
       row.worktreePath = event.worktreePath ?? row.worktreePath;
@@ -1311,6 +1343,7 @@ function phaseStatus(members) {
   if (!members.length) return "pending";
   if (members.some((member) => member.status === "failed")) return "failed";
   if (members.some((member) => member.status === "running")) return "running";
+  if (members.some((member) => member.status === "queued")) return "queued";
   if (members.every((member) => member.status === "cached")) return "cached";
   if (members.every((member) => member.status === "completed" || member.status === "cached")) return "completed";
   return "pending";
@@ -1324,16 +1357,17 @@ function agentTone(agent) {
 
 function runItem(run) {
   const live = run.status === "running" ? activeAgents.filter((agent) => agent.runId === run.runId) : [];
+  const displayStatus = displayRunStatus(run);
   const pinned = pins.includes(run.runId);
   const selected = run.runId === selectedRunId;
   return `
     <div class="run-item ${selected ? "selected" : ""}">
       <button class="run-main" type="button" data-run="${esc(run.runId)}" ${selected ? 'aria-current="true"' : ""}>
-        <span class="name"><span class="dot ${esc(run.status)}"></span>${esc(run.name ?? run.runId)}</span>
-        <span class="sub">${pill(run.status)} · ${fmtTime(run.startedAt)}</span>
-        <span class="sub mono">${esc(run.runId.slice(0, 14))}… · ${run.stats ? `${run.stats.completed}✓ ${run.stats.failed}× ${run.stats.cached}↻` : ""}</span>
+        <span class="name"><span class="dot ${esc(displayStatus)}"></span>${esc(run.name ?? run.runId)}</span>
+        <span class="sub">${pill(displayStatus)} · ${fmtTime(run.startedAt)}</span>
+        <span class="sub mono">${esc(run.runId.slice(0, 14))}… · ${run.stats ? `${run.stats.completed}✓ ${run.stats.failed}× ${run.stats.cached}↻ ${run.stats.queued ?? 0} queued` : ""}</span>
         ${live.map((agent) => `<span class="live" title="${esc(agent.activity?.text ?? agent.key)}">
-          <span class="dot running"></span><span>${esc(agent.label)}</span><span class="doing">${esc(nowLine(agent.activity))}</span>
+          <span class="dot ${esc(agent.status)}"></span><span>${esc(agent.label)}</span><span class="doing">${esc(agent.status === "queued" ? "waiting to execute" : nowLine(agent.activity))}</span>
         </span>`).join("")}
       </button>
       <button class="run-pin" type="button" data-pin="${esc(run.runId)}" aria-pressed="${pinned}"
@@ -1365,6 +1399,7 @@ function computeStructureKey(run, agents, journal) {
   return [
     run.runId,
     run.status,
+    run.ownerResponsive,
     run.attempt,
     run.worktrees?.length ?? 0,
     run.result == null ? 0 : 1,
@@ -1381,15 +1416,17 @@ function agentDisplay(agent) {
 }
 
 function agentNode(agent) {
+  const transcriptReady = agent.status !== "queued" && agent.transcript;
   const tags = [
     agent.options.effort ? { text: agent.options.effort, kind: "effort" } : null,
     agent.options.sandbox ? { text: agent.options.sandbox, kind: "" } : null,
     agent.worktreePath ? { text: `worktree${agent.worktreeKept ? " · kept" : ""}`, kind: "worktree" } : null,
+    agent.queueMs > 0 ? { text: `queued ${fmtDur(agent.queueMs)}`, kind: "" } : null,
   ].filter(Boolean);
   return `<button class="agent-node ${esc(agent.status)}" type="button"
       data-node="${esc(agent.key)}" data-status="${esc(agent.status)}" data-card="${esc(agent.key)}"
       data-transcript="${esc(agent.transcript ?? "")}" data-label="${esc(agent.label)}"
-      ${agent.transcript ? "" : "disabled"} title="${esc(agent.transcript ? `Open ${agent.label} transcript` : agent.label)}">
+      ${transcriptReady ? "" : "disabled"} title="${esc(transcriptReady ? `Open ${agent.label} transcript` : agent.label)}">
     <span class="agent-node-main" data-status="${esc(agent.status)}">
       <span class="node-status ${esc(agent.status)}" aria-hidden="true">${STATUS_ICON[agent.status] ?? ""}</span>
       <span class="sr-only">${esc(agent.status)}</span>
@@ -1442,17 +1479,19 @@ function renderSkeleton(run, agents, journal) {
   ].filter(Boolean).join("");
 
   const stageWidth = Math.max(900, groups.length * 284);
+  const runStatus = displayRunStatus(run);
   $("main").innerHTML = `<div class="workflow-shell">
     <article class="workflow-card">
       <header class="workflow-titlebar">
         <span class="workflow-symbol" aria-hidden="true"><span>◇</span></span>
         <div class="workflow-heading">
-          <h2><span class="title">${esc(run.name ?? run.runId)}</span><span class="workflow-number">#${run.attempt ?? 1}</span>${pill(run.status)}</h2>
+          <h2><span class="title">${esc(run.name ?? run.runId)}</span><span class="workflow-number">#${run.attempt ?? 1}</span>${pill(runStatus)}</h2>
           ${run.description ? `<p class="description">${esc(run.description)}</p>` : ""}
         </div>
         <div class="workflow-owner"><span class="creator-label">Creator</span><span class="creator-avatar" aria-hidden="true"></span><span>Wiff</span></div>
       </header>
       ${run.error ? `<div class="workflow-error">${STATUS_ICON.failed} ${esc(run.error.message)}</div>` : ""}
+      ${runStatus === "stalled" ? `<div class="workflow-error">${STATUS_ICON.stalled} The workflow owner has not updated its heartbeat for ${esc(fmtDur(run.heartbeatAgeMs))}.</div>` : ""}
       <div class="flow-viewport" id="flow-viewport">
         <div class="flow-stage" id="flow-stage" style="--phase-count:${groups.length};--stage-width:${stageWidth}px">
           <svg class="flow-edges" id="flow-edges" aria-hidden="true"></svg>
@@ -1562,12 +1601,20 @@ function updateDynamic() {
   for (const agent of agents) {
     const node = document.querySelector(`[data-node="${CSS.escape(agent.key)}"]`);
     if (!node) continue;
-    const to = agent.endedAt ? +new Date(agent.endedAt) : now;
     const duration = node.querySelector("[data-dur]");
-    if (duration && agent.startedAt) duration.textContent = fmtDur(to - +new Date(agent.startedAt));
+    if (duration) {
+      if (agent.status === "queued" && agent.queuedAt) {
+        duration.textContent = `queued ${fmtDur(now - +new Date(agent.queuedAt))}`;
+      } else if (agent.startedAt) {
+        const to = agent.endedAt ? +new Date(agent.endedAt) : now;
+        duration.textContent = fmtDur(agent.executionMs ?? to - +new Date(agent.startedAt));
+      }
+    }
     const doing = node.querySelector("[data-now]");
     if (doing) {
-      const line = agent.status === "running" ? nowLine(activity?.[agent.key]) : "";
+      const line = agent.status === "queued"
+        ? "waiting to execute"
+        : agent.status === "running" ? nowLine(activity?.[agent.key]) : "";
       doing.textContent = line;
       doing.title = line;
     }
@@ -1662,7 +1709,7 @@ document.addEventListener("click", (event) => {
       selectedRunId,
       card.dataset.transcript,
       card.dataset.label,
-      agentsIndex.get(card.dataset.card)?.status === "running",
+      ["queued", "running"].includes(agentsIndex.get(card.dataset.card)?.status),
       card.dataset.card,
     );
   }
@@ -1820,7 +1867,7 @@ setInterval(() => {
 setInterval(updateDynamic, 1000);
 setInterval(() => {
   if (!drawer?.live) return;
-  if (agentsIndex.get(drawer.agentKey)?.status !== "running") {
+  if (!["queued", "running"].includes(agentsIndex.get(drawer.agentKey)?.status)) {
     drawer.live = false;
     $("drawer-live").textContent = "";
     return;

@@ -1,6 +1,9 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import readline from "node:readline";
+import { promisify } from "node:util";
 import { serializeError } from "../util.mjs";
+
+const execFileAsync = promisify(execFile);
 
 function deferred() {
   let resolve;
@@ -10,6 +13,43 @@ function deferred() {
     reject = rejectPromise;
   });
   return { promise, resolve, reject };
+}
+
+const MCP_SERVER_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+export function parseCodexMcpServerNames(stdout) {
+  const listing = JSON.parse(stdout);
+  if (!Array.isArray(listing)) throw new Error("Codex MCP listing was not an array.");
+  return [
+    ...new Set(
+      listing
+        .map((entry) => entry?.name)
+        .filter((name) => typeof name === "string" && name.trim())
+        .map((name) => name.trim()),
+    ),
+  ];
+}
+
+export function buildCodexAppServerArgs(mcpServerNames) {
+  const args = [
+    "app-server",
+    "--stdio",
+    "--disable",
+    "multi_agent",
+    "--disable",
+    "plugins",
+    "--disable",
+    "apps",
+  ];
+  for (const name of new Set(["codex", ...mcpServerNames])) {
+    if (!MCP_SERVER_NAME_PATTERN.test(name)) {
+      throw new Error(
+        `Cannot safely disable Codex MCP server "${name}"; server names must contain only letters, digits, dash, or underscore.`,
+      );
+    }
+    args.push("-c", `mcp_servers.${name}.enabled=false`);
+  }
+  return args;
 }
 
 // Backend adapter that runs agents as native Codex threads over a single
@@ -24,41 +64,84 @@ export class CodexBackend {
   #closed = false;
   #stderr = "";
 
-  constructor({ command = "codex", requestTimeoutMs = 30_000 } = {}) {
+  constructor({
+    command = "codex",
+    requestTimeoutMs = 30_000,
+    mcpDiscoveryTimeoutMs = 10_000,
+    mcpServerNames,
+    mcpServerDiscovery,
+  } = {}) {
     this.command = command;
     this.requestTimeoutMs = requestTimeoutMs;
+    this.mcpDiscoveryTimeoutMs = mcpDiscoveryTimeoutMs;
+    this.mcpServerNames = mcpServerNames;
+    this.mcpServerDiscovery = mcpServerDiscovery;
   }
 
   async start() {
     if (this.#closed) throw new Error("Codex app-server client is closed.");
     if (this.#startPromise) return this.#startPromise;
-    this.#startPromise = this.#start();
-    return this.#startPromise;
+    const starting = this.#start();
+    this.#startPromise = starting;
+    starting.catch(() => {
+      if (this.#startPromise !== starting) return;
+      if (this.#child && !this.#child.killed) this.#child.kill("SIGTERM");
+      this.#child = undefined;
+      this.#startPromise = undefined;
+    });
+    return starting;
+  }
+
+  async #mcpServerNames() {
+    if (this.mcpServerNames !== undefined) return this.mcpServerNames;
+    if (this.mcpServerDiscovery) return this.mcpServerDiscovery();
+    let stdout;
+    try {
+      ({ stdout } = await execFileAsync(
+        this.command,
+        ["--disable", "plugins", "--disable", "apps", "mcp", "list", "--json"],
+        {
+          env: { ...process.env, CODEX_WORKFLOW_CHILD: "1" },
+          timeout: this.mcpDiscoveryTimeoutMs,
+          maxBuffer: 1024 * 1024,
+        },
+      ));
+    } catch (error) {
+      throw new Error(
+        `Unable to enumerate configured Codex MCP servers; refusing to start a Wiff child with inherited MCPs: ${error.message}`,
+      );
+    }
+    try {
+      return parseCodexMcpServerNames(stdout);
+    } catch (error) {
+      throw new Error(
+        `Unable to parse the configured Codex MCP server list; refusing to start a Wiff child with inherited MCPs: ${error.message}`,
+      );
+    }
   }
 
   async #start() {
-    this.#child = spawn(
+    const mcpServerNames = await this.#mcpServerNames();
+    this.#stderr = "";
+    const child = spawn(
       this.command,
-      [
-        "app-server",
-        "--stdio",
-        "--disable",
-        "multi_agent",
-        "-c",
-        "mcp_servers.codex.enabled=false",
-      ],
+      buildCodexAppServerArgs(mcpServerNames),
       {
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...process.env, CODEX_WORKFLOW_CHILD: "1" },
       },
     );
+    this.#child = child;
 
-    this.#child.stderr.setEncoding("utf8");
-    this.#child.stderr.on("data", (chunk) => {
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
       this.#stderr = `${this.#stderr}${chunk}`.slice(-32_000);
     });
-    this.#child.on("error", (error) => this.#failAll(error));
-    this.#child.on("exit", (code, signal) => {
+    child.on("error", (error) => {
+      if (this.#child === child) this.#failAll(error);
+    });
+    child.on("exit", (code, signal) => {
+      if (this.#child !== child) return;
       if (!this.#closed) {
         const detail = this.#stderr.trim();
         this.#failAll(
@@ -69,14 +152,14 @@ export class CodexBackend {
       }
     });
 
-    const lines = readline.createInterface({ input: this.#child.stdout });
+    const lines = readline.createInterface({ input: child.stdout });
     lines.on("line", (line) => this.#handleLine(line));
 
     await this.#request("initialize", {
       clientInfo: {
         name: "wiff",
         title: "wiff",
-        version: "0.1.5",
+        version: "0.6.1",
       },
       capabilities: { experimentalApi: true },
     });

@@ -63,6 +63,9 @@ Ad-hoc multi-agent orchestration ("spawn some subagents for this") is also great
 
   That screenshot is the feature: the host was killed mid-synthesis, and on resume the four finished agents came back from the journal in 0ms — only the interrupted one re-ran.
 - **Fail-hard semantics** — a rejected agent fails the workflow loudly (`parallelSettled()` is the explicit opt-out). No silent `null`s masquerading as success.
+- **Visible scheduling** — agents are journaled as queued before they acquire a runtime slot and
+  running only when backend execution starts. Queue and execution durations stay separate, while
+  owner heartbeats make a live-but-stalled workflow visible.
 - **Isolation where it matters** — `isolation: "worktree"` gives each writing agent a fresh detached git worktree. Clean ones vanish; dirty ones are kept and listed on the run for you to inspect or merge.
 - **Personas** — `agentType: "reviewer"` injects a markdown persona as the child's developer instructions, with frontmatter defaults for model/effort/sandbox.
 
@@ -115,7 +118,8 @@ sets the fallback for unrecognized models). On the Claude, Cursor, and Kimi back
 print mode auto-approves tools and has no OS sandbox.
 
 Requirements on the machine, regardless of harness: Node >= 22, git if you use
-`isolation: "worktree"`, and the runtime of whichever backend your agents use — the `codex`
+`isolation: "worktree"`, and the runtime of whichever backend your agents use — Codex CLI
+>= 0.144.6
 and/or `claude` CLI installed and authenticated, `CURSOR_API_KEY` for Cursor agents, or the
 `kimi` CLI configured with the requested full model alias (for example `kimi-code/k3`).
 
@@ -193,7 +197,7 @@ npx -p @xxxoooxoxo/wiff wiff-viewer    # http://127.0.0.1:4979  (--port / --root
 # or from a checkout: cd plugins/wiff && npm run viewer
 ```
 
-Zero dependencies, read-only over the run files, so it can watch runs owned by any process. A live strip across the top shows **every running agent in every run** with what it's doing right now (its latest command, file edit, or thought, tailed from the transcript). Below that: per-phase agent cards with live status lines, a gantt timeline, token counts, kept worktrees, and a click-through live-tailing transcript drawer. Light and dark themes.
+Zero dependencies, read-only over the run files, so it can watch runs owned by any process. A live strip across the top shows **every queued or running agent in every run**, including queue time and what executing agents are doing now (their latest command, file edit, or thought, tailed from the transcript). Owner heartbeats flag stalled hosts. Below that: per-phase agent cards with live status lines, a gantt timeline, token counts, kept worktrees, and a click-through live-tailing transcript drawer. Light and dark themes.
 
 <img alt="The transcript drawer open over a completed run, live-tailing one agent's transcript: its final findings report followed by raw token-usage and turn-completion events." src="docs/screenshots/transcript-dark.png">
 

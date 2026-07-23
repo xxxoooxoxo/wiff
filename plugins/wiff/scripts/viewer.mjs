@@ -8,6 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HTML_PATH = fileURLToPath(new URL("./viewer.html", import.meta.url));
+const HEARTBEAT_STALE_MS = 30_000;
 
 function defaultStateRoot() {
   return (
@@ -126,31 +127,51 @@ function extractActivity(events) {
   return null;
 }
 
-// Agents that have started but not completed/failed, per the journal.
-function deriveRunningAgents(journal) {
-  const running = new Map();
+// Agents that are queued or executing, per the journal.
+function deriveActiveAgents(journal) {
+  const active = new Map();
   for (const event of journal) {
-    if (event.type === "agent.started") {
-      running.set(event.key, {
+    if (event.type === "agent.queued") {
+      active.set(event.key, {
         key: event.key,
         label: event.label ?? event.key,
         phase: event.phase ?? "default",
-        startedAt: event.at,
+        status: "queued",
+        queuedAt: event.at,
         transcriptPath: event.transcriptPath,
         options: event.options ?? {},
       });
-    } else if (event.type === "agent.completed" || event.type === "agent.failed") {
-      running.delete(event.key);
+    } else if (event.type === "agent.started") {
+      const queued = active.get(event.key);
+      active.set(event.key, {
+        key: event.key,
+        label: event.label ?? queued?.label ?? event.key,
+        phase: event.phase ?? queued?.phase ?? "default",
+        status: "running",
+        queuedAt: event.queuedAt ?? queued?.queuedAt,
+        startedAt: event.at,
+        transcriptPath: event.transcriptPath ?? queued?.transcriptPath,
+        options: event.options ?? queued?.options ?? {},
+      });
+    } else if (
+      event.type === "agent.completed" ||
+      event.type === "agent.failed" ||
+      event.type === "agent.cached"
+    ) {
+      active.delete(event.key);
     }
   }
-  return [...running.values()];
+  return [...active.values()];
 }
 
 async function attachActivity(agents) {
   return Promise.all(
     agents.map(async (agent) => ({
       ...agent,
-      activity: agent.transcriptPath ? extractActivity(await readTailEvents(agent.transcriptPath)) : null,
+      activity:
+        agent.status === "running" && agent.transcriptPath
+          ? extractActivity(await readTailEvents(agent.transcriptPath))
+          : null,
     })),
   );
 }
@@ -158,7 +179,16 @@ async function attachActivity(agents) {
 // A run.json can say "running" after its owner died; report the truth.
 function withLiveness(run) {
   const stale = run.status === "running" && !isProcessAlive(run.ownerPid);
-  return { ...run, status: stale ? "interrupted" : run.status, ownerAlive: !stale };
+  const heartbeatAt = Date.parse(run.ownerHeartbeatAt);
+  const heartbeatAgeMs = Number.isFinite(heartbeatAt) ? Math.max(0, Date.now() - heartbeatAt) : null;
+  return {
+    ...run,
+    status: stale ? "interrupted" : run.status,
+    ownerAlive: !stale,
+    ownerResponsive:
+      stale ? false : heartbeatAgeMs === null ? undefined : heartbeatAgeMs <= HEARTBEAT_STALE_MS,
+    heartbeatAgeMs,
+  };
 }
 
 async function listRuns() {
@@ -175,9 +205,35 @@ async function listRuns() {
       const run = JSON.parse(
         await readFile(path.join(runsDirectory, entry.name, "run.json"), "utf8"),
       );
-      const { runId, status, name, description, phase, stats, startedAt, completedAt, revision, attempt, ownerPid } = run;
+      const {
+        runId,
+        status,
+        name,
+        description,
+        phase,
+        stats,
+        startedAt,
+        completedAt,
+        revision,
+        attempt,
+        ownerPid,
+        ownerHeartbeatAt,
+      } = run;
       runs.push(
-        withLiveness({ runId, status, name, description, phase, stats, startedAt, completedAt, revision, attempt, ownerPid }),
+        withLiveness({
+          runId,
+          status,
+          name,
+          description,
+          phase,
+          stats,
+          startedAt,
+          completedAt,
+          revision,
+          attempt,
+          ownerPid,
+          ownerHeartbeatAt,
+        }),
       );
     } catch {
       // Ignore torn or foreign directories.
@@ -198,7 +254,7 @@ async function getRun(runId) {
   const journal = await readJsonl(path.join(directory, "journal.jsonl"));
   const activity = {};
   if (run.status === "running") {
-    for (const agent of await attachActivity(deriveRunningAgents(journal))) {
+    for (const agent of await attachActivity(deriveActiveAgents(journal))) {
       activity[agent.key] = agent.activity;
     }
   }
@@ -211,20 +267,24 @@ async function getActiveAgents() {
   for (const run of await listRuns()) {
     if (run.status !== "running") continue;
     const journal = await readJsonl(path.join(runDirectoryFor(run.runId), "journal.jsonl"));
-    for (const agent of await attachActivity(deriveRunningAgents(journal))) {
+    for (const agent of await attachActivity(deriveActiveAgents(journal))) {
       active.push({
         runId: run.runId,
         runName: run.name ?? run.runId,
         key: agent.key,
         label: agent.label,
         phase: agent.phase,
+        status: agent.status,
+        queuedAt: agent.queuedAt,
         startedAt: agent.startedAt,
         model: agent.options.model,
         activity: agent.activity,
       });
     }
   }
-  active.sort((left, right) => String(left.startedAt).localeCompare(String(right.startedAt)));
+  active.sort((left, right) =>
+    String(left.queuedAt ?? left.startedAt).localeCompare(String(right.queuedAt ?? right.startedAt)),
+  );
   return active;
 }
 

@@ -24,7 +24,10 @@ import { validateWorkflowSource } from "./workflow-source.mjs";
 const execFileAsync = promisify(execFile);
 
 const MAX_SCRIPT_BYTES = 512 * 1024;
-const DEFAULT_AGENT_TIMEOUT_MS = 30 * 60 * 1_000;
+const DEFAULT_AGENT_TIMEOUT_MS = 10 * 60 * 1_000;
+const LEGACY_AGENT_TIMEOUT_MS = 30 * 60 * 1_000;
+const HEARTBEAT_INTERVAL_MS = 5_000;
+export const HEARTBEAT_STALE_MS = 30_000;
 const AGENT_TYPE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 const MAX_PERSONA_BYTES = 64 * 1024;
 const PERSONA_DEFAULT_KEYS = new Set(["model", "effort", "sandbox", "provider"]);
@@ -99,6 +102,18 @@ function markInterrupted(run) {
   return run;
 }
 
+function withOwnerHealth(run, staleMs = HEARTBEAT_STALE_MS) {
+  if (run.status !== "running") return run;
+  const heartbeatAt = Date.parse(run.ownerHeartbeatAt);
+  const heartbeatAgeMs = Number.isFinite(heartbeatAt) ? Math.max(0, Date.now() - heartbeatAt) : null;
+  return {
+    ...run,
+    ownerAlive: isProcessAlive(run.ownerPid),
+    ownerResponsive: heartbeatAgeMs === null ? undefined : heartbeatAgeMs <= staleMs,
+    heartbeatAgeMs,
+  };
+}
+
 function timeoutSignal(parentSignal, timeoutMs, label) {
   const controller = new AbortController();
   const timer = setTimeout(
@@ -114,15 +129,22 @@ function timeoutSignal(parentSignal, timeoutMs, label) {
   };
 }
 
+function cacheKeyOptions(options) {
+  const { timeoutMs: _timeoutMs, ...semanticOptions } = options;
+  return semanticOptions;
+}
+
 async function loadCache(journalPath) {
   const cache = new Map();
   // Prior attempts that started but never completed, for mid-turn resume injection.
   const unfinished = new Map();
   for (const event of await readJsonl(journalPath)) {
     if (event.type === "agent.completed") {
+      const started = unfinished.get(event.key);
       unfinished.delete(event.key);
       cache.set(event.key, {
         inputHash: event.inputHash,
+        options: started?.options,
         result: event.result,
         threadId: event.threadId,
         turnId: event.turnId,
@@ -135,6 +157,7 @@ async function loadCache(journalPath) {
         transcriptPath: event.transcriptPath,
         worktreePath: event.worktreePath,
         startedAt: event.at,
+        options: event.options,
       });
     }
   }
@@ -229,12 +252,34 @@ export class WorkflowManager {
   #worktreeMutex = Promise.resolve();
   #initialized = false;
 
-  constructor({ stateRoot = defaultStateRoot(), backend, maxConcurrency, agentsDir } = {}) {
+  constructor({
+    stateRoot = defaultStateRoot(),
+    backend,
+    maxConcurrency,
+    agentsDir,
+    heartbeatIntervalMs = HEARTBEAT_INTERVAL_MS,
+    heartbeatStaleMs = HEARTBEAT_STALE_MS,
+    heartbeatFailureLimit = 3,
+    writeRun = atomicWriteJson,
+  } = {}) {
+    if (!Number.isInteger(heartbeatIntervalMs) || heartbeatIntervalMs < 10) {
+      throw new Error("heartbeatIntervalMs must be an integer of at least 10.");
+    }
+    if (!Number.isInteger(heartbeatStaleMs) || heartbeatStaleMs <= heartbeatIntervalMs) {
+      throw new Error("heartbeatStaleMs must be an integer greater than heartbeatIntervalMs.");
+    }
+    if (!Number.isInteger(heartbeatFailureLimit) || heartbeatFailureLimit < 1) {
+      throw new Error("heartbeatFailureLimit must be a positive integer.");
+    }
     this.stateRoot = stateRoot;
     this.runsDirectory = path.join(stateRoot, "runs");
     this.agentsDir = agentsDir ?? defaultAgentsDir();
     this.backend = backend ?? new BackendRouter();
     this.semaphore = new Semaphore(maxConcurrency ?? defaultConcurrency());
+    this.heartbeatIntervalMs = heartbeatIntervalMs;
+    this.heartbeatStaleMs = heartbeatStaleMs;
+    this.heartbeatFailureLimit = heartbeatFailureLimit;
+    this.writeRun = writeRun;
   }
 
   async initialize() {
@@ -323,6 +368,7 @@ export class WorkflowManager {
     Object.assign(run, {
       status: "running",
       ownerPid: process.pid,
+      ownerHeartbeatAt: now,
       sourceHash: hashText(source),
       phase: null,
       result: undefined,
@@ -330,7 +376,7 @@ export class WorkflowManager {
       completedAt: undefined,
       startedAt: now,
       updatedAt: now,
-      stats: { requested: 0, running: 0, completed: 0, failed: 0, cached: 0 },
+      stats: { requested: 0, queued: 0, running: 0, completed: 0, failed: 0, cached: 0 },
       failures: [],
       worktrees: [],
     });
@@ -347,9 +393,11 @@ export class WorkflowManager {
     };
     this.#active.set(runId, execution);
     execution.cancelWatcher = this.#watchCancellation(run, execution);
+    execution.heartbeat = this.#startHeartbeat(run, execution);
     execution.promise = this.#execute(run, source, execution)
       .finally(() => {
         clearInterval(execution.cancelWatcher);
+        clearInterval(execution.heartbeat);
         this.#active.delete(runId);
         this.#notify(runId);
       });
@@ -538,6 +586,35 @@ export class WorkflowManager {
     return timer;
   }
 
+  #startHeartbeat(run, execution) {
+    let writing = false;
+    let consecutiveFailures = 0;
+    const beat = async () => {
+      if (writing || execution.abortController.signal.aborted) return;
+      writing = true;
+      try {
+        run.ownerHeartbeatAt = new Date().toISOString();
+        await this.#persistRun(run);
+        consecutiveFailures = 0;
+      } catch (error) {
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= this.heartbeatFailureLimit) {
+          execution.stopKind = "interrupted";
+          execution.abortController.abort(
+            new Error(
+              `Workflow heartbeat failed ${consecutiveFailures} consecutive times: ${error.message}`,
+            ),
+          );
+        }
+      } finally {
+        writing = false;
+      }
+    };
+    const timer = setInterval(() => void beat(), this.heartbeatIntervalMs);
+    timer.unref?.();
+    return timer;
+  }
+
   async #handleAgentRequest({ run, worker, message, journal, cache, unfinished, execution }) {
     const respond = (payload) => {
       if (worker.connected) worker.send({ type: "agent.response", id: message.id, ...payload });
@@ -554,11 +631,47 @@ export class WorkflowManager {
           : null;
       const options = this.#normalizeAgentOptions(message.options, run.cwd, persona);
       const key = options.key ?? `${message.phase || "default"}:${message.sequence}`;
-      const inputHash = hashValue({ prompt: message.prompt, options });
+      const inputHash = hashValue({
+        prompt: message.prompt,
+        options: cacheKeyOptions(options),
+      });
+      const legacyOptions = {
+        ...options,
+        effort: message.options?.effort ?? persona?.defaults?.effort ?? "high",
+        timeoutMs: message.options?.timeoutMs ?? LEGACY_AGENT_TIMEOUT_MS,
+      };
+      const acceptedSemanticHashes = new Set([
+        inputHash,
+        hashValue({
+          prompt: message.prompt,
+          options: cacheKeyOptions(legacyOptions),
+        }),
+      ]);
+      const acceptedInputHashes = new Set([
+        inputHash,
+        hashValue({ prompt: message.prompt, options }),
+        hashValue({ prompt: message.prompt, options: legacyOptions }),
+      ]);
+      const matchesInput = (record) => {
+        if (!record) return false;
+        if (acceptedInputHashes.has(record.inputHash)) return true;
+        if (!record.options) return false;
+        const recordedInputHash = hashValue({
+          prompt: message.prompt,
+          options: record.options,
+        });
+        if (recordedInputHash !== record.inputHash) return false;
+        return acceptedSemanticHashes.has(
+          hashValue({
+            prompt: message.prompt,
+            options: cacheKeyOptions(record.options),
+          }),
+        );
+      };
       run.stats.requested += 1;
 
       const cached = cache.get(key);
-      if (cached?.inputHash === inputHash) {
+      if (matchesInput(cached)) {
         run.stats.cached += 1;
         if (cached.worktreeKept && cached.worktreePath) {
           const stillThere = await stat(cached.worktreePath).then(
@@ -587,27 +700,21 @@ export class WorkflowManager {
       // inject a digest of its transcript and, for worktree agents, keep its partial checkout.
       const prior = unfinished.get(key);
       const continuation =
-        prior?.inputHash === inputHash
+        matchesInput(prior)
           ? { digest: await transcriptDigest(prior.transcriptPath), startedAt: prior.startedAt }
           : null;
 
-      const worktree =
-        options.isolation === "worktree"
-          ? await this.#createWorktree(run, key, { reuse: continuation !== null })
-          : null;
-      const prompt = continuation?.digest
-        ? continuationPreamble(continuation.digest, continuation.startedAt, worktree?.reused ?? false) + message.prompt
-        : message.prompt;
       const transcriptPath = path.join(
         path.dirname(run.runPath),
         "agents",
         `${safeFilename(key)}-${message.sequence}.jsonl`,
       );
       const transcript = new JsonlWriter(transcriptPath);
-      run.stats.running += 1;
+      const queuedAt = new Date().toISOString();
+      run.stats.queued += 1;
       await journal.append({
-        type: "agent.started",
-        at: new Date().toISOString(),
+        type: "agent.queued",
+        at: queuedAt,
         key,
         label: options.label,
         phase: message.phase,
@@ -615,40 +722,93 @@ export class WorkflowManager {
         inputHash,
         transcriptPath,
         options,
-        worktreePath: worktree?.path,
         resumedMidTurn: continuation?.digest ? true : undefined,
-        worktreeReused: worktree?.reused || undefined,
       });
       await this.#touch(run);
 
-      const timed = timeoutSignal(
-        execution.abortController.signal,
-        options.timeoutMs,
-        `Agent ${key}`,
-      );
+      let worktree;
+      let startedAt;
+      let worktreeState;
+      let worktreeRecorded = false;
+      let lifecycle = "queued";
       try {
+        worktree =
+          options.isolation === "worktree"
+            ? await this.#createWorktree(run, key, { reuse: continuation !== null })
+            : null;
+        const prompt = continuation?.digest
+          ? continuationPreamble(
+              continuation.digest,
+              continuation.startedAt,
+              worktree?.reused ?? false,
+            ) + message.prompt
+          : message.prompt;
         const response = await this.semaphore.run(
-          () =>
-            this.backend.runAgent({
-              prompt,
-              options: worktree ? { ...options, cwd: worktree.path } : options,
-              instructions: persona?.instructions,
-              signal: timed.signal,
-              onEvent: (event) => transcript.append({ at: new Date().toISOString(), event }),
-            }),
-          timed.signal,
+          async () => {
+            if (execution.abortController.signal.aborted) {
+              throw execution.abortController.signal.reason ?? new Error("Workflow cancelled.");
+            }
+            startedAt = new Date().toISOString();
+            run.stats.queued -= 1;
+            run.stats.running += 1;
+            lifecycle = "running";
+            await journal.append({
+              type: "agent.started",
+              at: startedAt,
+              queuedAt,
+              queueMs: Date.parse(startedAt) - Date.parse(queuedAt),
+              key,
+              label: options.label,
+              phase: message.phase,
+              sequence: message.sequence,
+              inputHash,
+              transcriptPath,
+              options,
+              worktreePath: worktree?.path,
+              resumedMidTurn: continuation?.digest ? true : undefined,
+              worktreeReused: worktree?.reused || undefined,
+            });
+            await this.#touch(run);
+
+            const timed = timeoutSignal(
+              execution.abortController.signal,
+              options.timeoutMs,
+              `Agent ${key}`,
+            );
+            try {
+              return await this.backend.runAgent({
+                prompt,
+                options: worktree ? { ...options, cwd: worktree.path } : options,
+                instructions: persona?.instructions,
+                signal: timed.signal,
+                onEvent: (event) => transcript.append({ at: new Date().toISOString(), event }),
+              });
+            } finally {
+              timed.clear();
+            }
+          },
+          execution.abortController.signal,
         );
         await transcript.flush();
-        const worktreeState = worktree ? await this.#releaseWorktree(worktree) : null;
-        if (worktreeState?.kept) run.worktrees.push({ key, path: worktreeState.path });
+        worktreeState = worktree ? await this.#releaseWorktree(worktree) : null;
+        if (worktreeState?.kept) {
+          run.worktrees.push({ key, path: worktreeState.path });
+          worktreeRecorded = true;
+        }
         run.stats.running -= 1;
         run.stats.completed += 1;
+        lifecycle = "completed";
+        const completedAt = new Date().toISOString();
         const event = {
           type: "agent.completed",
-          at: new Date().toISOString(),
+          at: completedAt,
           key,
           inputHash,
           sequence: message.sequence,
+          queuedAt,
+          startedAt,
+          queueMs: Date.parse(startedAt) - Date.parse(queuedAt),
+          executionMs: Date.parse(completedAt) - Date.parse(startedAt),
           result: jsonClone(response.result, "agent result"),
           threadId: response.threadId,
           turnId: response.turnId,
@@ -662,17 +822,30 @@ export class WorkflowManager {
         await this.#touch(run);
         respond({ ok: true, value: event.result });
       } catch (error) {
+        if (lifecycle === "completed") throw error;
         await transcript.flush();
-        const worktreeState = worktree ? await this.#releaseWorktree(worktree) : null;
-        if (worktreeState?.kept) run.worktrees.push({ key, path: worktreeState.path });
-        run.stats.running -= 1;
+        worktreeState ??= worktree ? await this.#releaseWorktree(worktree) : null;
+        if (worktreeState?.kept && !worktreeRecorded) {
+          run.worktrees.push({ key, path: worktreeState.path });
+          worktreeRecorded = true;
+        }
+        if (lifecycle === "running") run.stats.running -= 1;
+        else run.stats.queued -= 1;
         run.stats.failed += 1;
+        lifecycle = "failed";
+        const failedAt = new Date().toISOString();
         const failure = {
           type: "agent.failed",
-          at: new Date().toISOString(),
+          at: failedAt,
           key,
           inputHash,
           sequence: message.sequence,
+          queuedAt,
+          startedAt,
+          queueMs: startedAt
+            ? Date.parse(startedAt) - Date.parse(queuedAt)
+            : Date.parse(failedAt) - Date.parse(queuedAt),
+          executionMs: startedAt ? Date.parse(failedAt) - Date.parse(startedAt) : 0,
           error: serializeError(error),
           transcriptPath,
           worktreePath: worktreeState?.path,
@@ -682,8 +855,6 @@ export class WorkflowManager {
         await journal.append(failure);
         await this.#touch(run);
         respond({ ok: false, error: failure.error });
-      } finally {
-        timed.clear();
       }
     } catch (error) {
       respond({ ok: false, error: serializeError(error) });
@@ -813,7 +984,7 @@ export class WorkflowManager {
         process.env.CODEX_WORKFLOW_DEFAULT_MODEL ??
         "gpt-5.6-sol",
       provider: input.provider ?? personaDefaults.provider,
-      effort: input.effort ?? personaDefaults.effort ?? "high",
+      effort: input.effort ?? personaDefaults.effort ?? "medium",
       sandbox: input.sandbox ?? personaDefaults.sandbox ?? "read-only",
       schema: input.schema,
       cwd: input.cwd ?? runCwd,
@@ -867,7 +1038,9 @@ export class WorkflowManager {
   async #persistRun(run) {
     const snapshot = jsonClone(run, "run state");
     const previous = this.#writeQueues.get(run.runId) ?? Promise.resolve();
-    const write = previous.then(() => atomicWriteJson(run.runPath, snapshot));
+    const write = previous
+      .catch(() => undefined)
+      .then(() => this.writeRun(run.runPath, snapshot));
     this.#writeQueues.set(run.runId, write);
     try {
       await write;
@@ -889,7 +1062,7 @@ export class WorkflowManager {
     if (run.status === "running" && !isProcessAlive(run.ownerPid)) {
       await atomicWriteJson(runPath, markInterrupted(run));
     }
-    return run;
+    return withOwnerHealth(run, this.heartbeatStaleMs);
   }
 
   async wait(runId, timeoutMs = 55_000) {

@@ -4,7 +4,7 @@ import { WorkflowManager } from "./runtime.mjs";
 import { serializeError } from "./util.mjs";
 
 const SERVER_NAME = "wiff";
-const SERVER_VERSION = "0.5.0";
+const SERVER_VERSION = "0.6.1";
 const CHILD_MODE = process.env.CODEX_WORKFLOW_CHILD === "1";
 
 const tools = [
@@ -114,7 +114,10 @@ function summarizeRun(run) {
     `Workflow ${run.runId}: ${run.status}`,
     run.name ? `Name: ${run.name}` : null,
     run.phase ? `Phase: ${run.phase}` : null,
-    `Agents: ${run.stats?.completed ?? 0} completed, ${run.stats?.failed ?? 0} failed, ${run.stats?.cached ?? 0} cached, ${run.stats?.running ?? 0} running`,
+    `Agents: ${run.stats?.completed ?? 0} completed, ${run.stats?.failed ?? 0} failed, ${run.stats?.cached ?? 0} cached, ${run.stats?.queued ?? 0} queued, ${run.stats?.running ?? 0} executing`,
+    run.status === "running" && run.ownerResponsive === false
+      ? `Owner: stalled (${Math.round((run.heartbeatAgeMs ?? 0) / 1_000)}s since heartbeat)`
+      : null,
     `Run record: ${run.runPath}`,
     `Journal: ${run.journalPath}`,
   ].filter(Boolean);

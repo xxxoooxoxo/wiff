@@ -4,6 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { ClaudeBackend } from "../src/backends/claude.mjs";
+import {
+  buildCodexAppServerArgs,
+  CodexBackend,
+  parseCodexMcpServerNames,
+} from "../src/backends/codex.mjs";
 import { BackendRouter, inferProvider } from "../src/backends/index.mjs";
 
 const STUB_SOURCE = `#!/usr/bin/env node
@@ -92,6 +97,57 @@ test("inferProvider maps model prefixes", () => {
   assert.equal(inferProvider("gemini-2.5-pro"), "gemini");
   assert.equal(inferProvider("mystery-model"), null);
   assert.equal(inferProvider(undefined), null);
+});
+
+test("Codex app-server startup disables every configured MCP server", () => {
+  const names = parseCodexMcpServerNames(
+    JSON.stringify([
+      { name: "postgres", enabled: true },
+      { name: "browser-tools", enabled: true },
+      { name: "postgres", enabled: true },
+    ]),
+  );
+  assert.deepEqual(names, ["postgres", "browser-tools"]);
+
+  const args = buildCodexAppServerArgs(names);
+  assert.deepEqual(
+    args.filter((value, index) => args[index - 1] === "--disable"),
+    ["multi_agent", "plugins", "apps"],
+  );
+  const overrides = args
+    .map((value, index) => value === "-c" ? args[index + 1] : null)
+    .filter(Boolean);
+  assert.deepEqual(overrides, [
+    "mcp_servers.codex.enabled=false",
+    "mcp_servers.postgres.enabled=false",
+    "mcp_servers.browser-tools.enabled=false",
+  ]);
+  assert.throws(
+    () => buildCodexAppServerArgs(["unsafe=name"]),
+    /Cannot safely disable Codex MCP server/,
+  );
+});
+
+test("Codex MCP listing rejects malformed output", () => {
+  assert.throws(() => parseCodexMcpServerNames("{}"), /was not an array/);
+  assert.throws(() => parseCodexMcpServerNames("not json"), /Unexpected token|JSON/);
+});
+
+test("Codex backend retries MCP discovery after a transient failure", async () => {
+  let discoveries = 0;
+  const backend = new CodexBackend({
+    command: process.execPath,
+    requestTimeoutMs: 1_000,
+    mcpServerDiscovery: async () => {
+      discoveries += 1;
+      if (discoveries === 1) throw new Error("transient discovery failure");
+      return [];
+    },
+  });
+  await assert.rejects(backend.start(), /transient discovery failure/);
+  await assert.rejects(backend.start(), /app-server exited|stdin is not writable|timed out/);
+  assert.equal(discoveries, 2);
+  await backend.close();
 });
 
 test("router picks backends by provider, model prefix, then default", async () => {
