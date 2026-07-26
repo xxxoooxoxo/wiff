@@ -658,6 +658,10 @@
   .agent-node.running .agent-node-main { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 36%, var(--line)); }
   .agent-node.queued .agent-node-main { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 20%, var(--line)); }
   .agent-node.failed .agent-node-main { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--bad) 38%, var(--line)); }
+  .agent-node.goal.running .agent-node-main,
+  .agent-node.goal.queued .agent-node-main {
+    box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 52%, var(--line));
+  }
   .node-status {
     display: grid;
     place-items: center;
@@ -692,6 +696,25 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .goal-badge {
+    display: inline-flex;
+    align-items: baseline;
+    flex: none;
+    gap: 3px;
+    border-radius: 6px;
+    padding: 2px 7px 2px 3px;
+    background: var(--running-bg);
+    color: var(--running);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.035em;
+    line-height: 1;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .agent-node.completed .goal-badge { background: var(--good-bg); color: var(--good); }
+  .agent-node.failed .goal-badge { background: var(--bad-bg); color: var(--bad); }
+  .agent-node.cached .goal-badge { background: var(--cached-bg); color: var(--cached); }
   .node-multiplier {
     flex: none;
     border-radius: 8px;
@@ -1224,6 +1247,7 @@ function deriveAgents(journal) {
         phase: event.phase ?? "default",
         sequence: event.sequence,
         status: "queued",
+        goal: event.goal === true,
         queuedAt: event.at,
         options: event.options ?? {},
         transcript: event.transcriptPath?.split("/").pop(),
@@ -1237,6 +1261,7 @@ function deriveAgents(journal) {
         phase: event.phase ?? queued?.phase ?? "default",
         sequence: event.sequence ?? queued?.sequence,
         status: "running",
+        goal: event.goal === true || queued?.goal === true,
         queuedAt: event.queuedAt ?? queued?.queuedAt,
         startedAt: event.at,
         queueMs: event.queueMs,
@@ -1260,6 +1285,7 @@ function deriveAgents(journal) {
       row.executionMs = event.executionMs;
       row.usage = event.usage;
       row.error = event.error?.message;
+      row.goal = event.goal === true || row.goal === true;
       row.worktreePath = event.worktreePath ?? row.worktreePath;
       row.worktreeKept = event.worktreeKept;
       row.transcript = row.transcript ?? event.transcriptPath?.split("/").pop();
@@ -1272,6 +1298,7 @@ function deriveAgents(journal) {
         phase: prior?.phase ?? event.phase ?? "cached",
         sequence: event.sequence ?? prior?.sequence,
         status: "cached",
+        goal: event.goal === true || prior?.goal === true,
         startedAt: event.at,
         endedAt: event.at,
         options: prior?.options ?? event.options ?? {},
@@ -1405,7 +1432,7 @@ function computeStructureKey(run, agents, journal) {
     run.result == null ? 0 : 1,
     JSON.stringify(plannedPhases(run)),
     journal.filter((event) => event.type === "phase").map((event) => event.name).join("|"),
-    agents.map((agent) => `${agent.key}:${agent.phase}:${agent.status}`).join("|"),
+    agents.map((agent) => `${agent.key}:${agent.phase}:${agent.status}:${agent.goal ? "goal" : ""}`).join("|"),
   ].join("§");
 }
 
@@ -1413,6 +1440,18 @@ function agentDisplay(agent) {
   if (agent.options.agentType) return `@${agent.options.agentType}`;
   if (agent.options.model) return agent.options.model;
   return "agent";
+}
+
+function goalBadge(agent) {
+  if (!agent.goal) return "";
+  const state = {
+    queued: ["∞", "goal queued"],
+    running: ["∞", "goal active"],
+    completed: ["✓", "goal met"],
+    failed: ["×", "goal failed"],
+    cached: ["↻", "goal replayed"],
+  }[agent.status] ?? ["∞", "goal"];
+  return `<span class="goal-badge"><span aria-hidden="true">${state[0]}</span>${state[1]}</span>`;
 }
 
 function agentNode(agent) {
@@ -1423,7 +1462,7 @@ function agentNode(agent) {
     agent.worktreePath ? { text: `worktree${agent.worktreeKept ? " · kept" : ""}`, kind: "worktree" } : null,
     agent.queueMs > 0 ? { text: `queued ${fmtDur(agent.queueMs)}`, kind: "" } : null,
   ].filter(Boolean);
-  return `<button class="agent-node ${esc(agent.status)}" type="button"
+  return `<button class="agent-node ${esc(agent.status)}${agent.goal ? " goal" : ""}" type="button"
       data-node="${esc(agent.key)}" data-status="${esc(agent.status)}" data-card="${esc(agent.key)}"
       data-transcript="${esc(agent.transcript ?? "")}" data-label="${esc(agent.label)}"
       ${transcriptReady ? "" : "disabled"} title="${esc(transcriptReady ? `Open ${agent.label} transcript` : agent.label)}">
@@ -1431,6 +1470,7 @@ function agentNode(agent) {
       <span class="node-status ${esc(agent.status)}" aria-hidden="true">${STATUS_ICON[agent.status] ?? ""}</span>
       <span class="sr-only">${esc(agent.status)}</span>
       <span class="node-label">${esc(agent.label)}</span>
+      ${goalBadge(agent)}
     </span>
     <span class="agent-node-owner">
       <span class="agent-orb tone-${agentTone(agent)}" aria-hidden="true"></span>

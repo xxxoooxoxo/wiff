@@ -32,6 +32,72 @@ Workflow JavaScript cannot import modules or directly use the filesystem, shell,
 
 The JSON value supplied to `workflow_start`.
 
+### User and project preferences
+
+Wiff loads optional JSON preferences from two locations for every new or resumed run:
+
+1. `<WIFF_HOME>/config.json` (normally `~/.wiff/config.json`) — user-wide preferences.
+2. `<workflow cwd>/.wiff/config.json` — project preferences.
+
+Project defaults override user defaults. Explicit `agent()` options override defaults, while
+matching rules are applied afterward as user policy and can override generated workflow options.
+User and project instructions are combined and delivered to every matching worker as explicit
+user preferences in addition to its task.
+
+```json
+{
+  "version": 1,
+  "instructions": "Prefer source-backed conclusions and verify before reporting success.",
+  "defaults": {
+    "model": "claude-sonnet-5",
+    "effort": "medium",
+    "fallbackModels": ["gpt-5.6-sol"]
+  },
+  "rules": [
+    {
+      "name": "deep-review",
+      "when": {
+        "phase": ["Review", "Audit"],
+        "promptIncludes": ["security", "payment"]
+      },
+      "instructions": "Review adversarially and report only concrete defects.",
+      "options": {
+        "model": "claude-opus-5",
+        "effort": "high",
+        "fallbackModels": ["gpt-5.6-sol", "claude-sonnet-5"]
+      }
+    },
+    {
+      "name": "fix-until-green",
+      "when": {
+        "phase": ["Fix", "Repair"]
+      },
+      "goal": "Do not finish until the relevant tests pass.",
+      "options": {
+        "model": "gpt-5.6-sol",
+        "fallbackModels": ["gpt-5.6-terra"]
+      }
+    }
+  ]
+}
+```
+
+`when.phase` and `when.key` accept a string or array and match any listed value.
+`when.promptIncludes` performs a case-insensitive any-term match. All supplied `when` fields must
+match. Rules run in file order, user rules before project rules; later matching values win while
+their `instructions` accumulate.
+
+Preference `defaults` and rule `options` accept `model`, `provider`, `effort`, `sandbox`,
+`timeoutMs`, `isolation`, and `fallbackModels`. A rule's `goal` may be `true` (use the agent
+request as the objective), `false`, or a completion-condition string appended to the objective.
+Native `/goal` execution still requires a Codex model, so a goal rule should select Codex or
+provide a Codex fallback.
+
+Unknown keys, invalid values, and malformed JSON fail `workflow_start` instead of being ignored.
+Run records contain preference source paths and hashes, not the preference text. The effective
+preference decision participates in each agent's cache identity, so editing applicable
+instructions, rules, models, or goal conditions causes that agent to run again on resume.
+
 ### `agent(prompt, options)`
 
 Start one child agent and return its final response. With `schema`, return parsed JSON; otherwise return text. The backend is chosen per agent from the model name (see Backends below).
@@ -42,6 +108,12 @@ Options:
   `timeoutMs` do not invalidate a completed result.
 - `label`: human-readable activity label.
 - `model`: model id. Defaults to `gpt-5.6-sol` (override with `WIFF_DEFAULT_MODEL`). The model prefix picks the backend: `gpt-*`/`o*`/`codex*` run on Codex, `claude-*`/`opus`/`sonnet`/`haiku`/`fable` run on Claude Code, `composer-*` runs on Cursor, and `kimi-code/*` runs on Kimi.
+  Current explicit Claude ids include `claude-fable-5`, `claude-opus-5`,
+  `claude-sonnet-5`, and `claude-haiku-4-5`; the short family names remain moving aliases for
+  the latest model available through the installed Claude CLI.
+- `fallbackModels`: ordered model ids attempted after the primary model fails. Fallback model
+  prefixes select their own backends, so a path may cross providers. Fallback transitions are
+  written to the agent transcript. Cancellation never triggers a fallback.
 - `provider`: explicit backend (`codex`, `claude`, `cursor`, or `kimi`), overriding model-prefix inference.
 - `effort`: reasoning effort. Defaults to `medium`. Prefer `low` for mechanical inventory,
   `medium` for ordinary implementation, and reserve `high`/`xhigh` for the few review or
@@ -50,7 +122,8 @@ Options:
 - `schema`: JSON Schema for the final response.
 - `cwd`: absolute child working directory. Defaults to the run directory.
 - `timeoutMs`: child execution timeout. Defaults to 10 minutes and starts only after the agent
-  acquires a runtime concurrency slot; queue time is recorded separately.
+  acquires a runtime concurrency slot; queue time is recorded separately. For a `/goal` stage,
+  the timeout covers the complete multi-turn goal rather than resetting for every continuation.
 - `isolation`: `"worktree"` runs the agent in a fresh detached git worktree of the run cwd's
   repository (created under the run directory). Clean worktrees are removed when the agent
   finishes; worktrees with uncommitted changes are kept and listed in the run's `worktrees`
@@ -61,6 +134,35 @@ Options:
   `CODEX_WORKFLOW_AGENTS_DIR`). Optional `---` frontmatter keys `model`, `effort`, `sandbox`,
   and `provider` become defaults for the agent; explicit options win. Editing a persona
   invalidates cached results for agents that use it.
+
+### `/goal` agent stages
+
+Prefix a Codex agent prompt with `/goal` when the workflow must remain at that stage until an
+objective is actually satisfied:
+
+```js
+phase("Repair");
+const repair = await agent(
+  `/goal Make the unit tests pass. Diagnose failures, implement the fixes, and verify the final test run.`,
+  {
+    key: "repair-until-green",
+    model: "gpt-5.6-sol",
+    sandbox: "workspace-write",
+    timeoutMs: 30 * 60 * 1_000,
+  },
+);
+```
+
+Wiff creates a native Codex thread goal from the text after `/goal`, runs the first turn, and
+continues on the same thread while the goal remains `active`. The surrounding workflow does not
+advance to its next statement or phase until the worker marks the goal `complete`. A `blocked`,
+`paused`, `usageLimited`, or `budgetLimited` goal fails the agent stage explicitly. Cancellation
+and `timeoutMs` still stop the whole stage.
+
+`/goal` stages currently require the Codex backend. Wiff rejects the directive when `provider`
+or the model routes the agent to Claude, Cursor, or Kimi. Use a stable `key` as usual: a completed
+goal replays from cache, while an interrupted goal starts a fresh Codex thread with Wiff's
+mid-turn progress digest and reuses its dirty worktree when applicable.
 
 ## Backends
 

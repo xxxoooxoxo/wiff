@@ -5,6 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { BackendRouter } from "./backends/index.mjs";
+import {
+  applyWorkflowPreferences,
+  loadWorkflowPreferences,
+} from "./preferences.mjs";
 import { Semaphore } from "./semaphore.mjs";
 import {
   JsonlWriter,
@@ -134,6 +138,10 @@ function cacheKeyOptions(options) {
   return semanticOptions;
 }
 
+function isGoalPrompt(prompt) {
+  return /^\s*\/goal(?:\s|$)/.test(prompt);
+}
+
 async function loadCache(journalPath) {
   const cache = new Map();
   // Prior attempts that started but never completed, for mid-turn resume injection.
@@ -148,6 +156,7 @@ async function loadCache(journalPath) {
         result: event.result,
         threadId: event.threadId,
         turnId: event.turnId,
+        goal: event.goal,
         worktreePath: event.worktreePath,
         worktreeKept: event.worktreeKept,
       });
@@ -356,6 +365,10 @@ export class WorkflowManager {
     }
 
     await assertDirectory(run.cwd);
+    const preferences = await loadWorkflowPreferences({
+      stateRoot: this.stateRoot,
+      cwd: run.cwd,
+    });
     if (Buffer.byteLength(source, "utf8") > MAX_SCRIPT_BYTES) {
       throw new Error(`Workflow script exceeds ${MAX_SCRIPT_BYTES} bytes.`);
     }
@@ -379,6 +392,7 @@ export class WorkflowManager {
       stats: { requested: 0, queued: 0, running: 0, completed: 0, failed: 0, cached: 0 },
       failures: [],
       worktrees: [],
+      preferenceSources: preferences.sources,
     });
     run.revision = (run.revision ?? 0) + 1;
     await this.#persistRun(run);
@@ -390,6 +404,7 @@ export class WorkflowManager {
       stopKind: undefined,
       cancelWatcher: undefined,
       pendingAgents: new Set(),
+      preferences,
     };
     this.#active.set(runId, execution);
     execution.cancelWatcher = this.#watchCancellation(run, execution);
@@ -629,10 +644,21 @@ export class WorkflowManager {
         message.options?.agentType !== undefined
           ? await this.#resolveAgentType(message.options.agentType, run.cwd)
           : null;
-      const options = this.#normalizeAgentOptions(message.options, run.cwd, persona);
-      const key = options.key ?? `${message.phase || "default"}:${message.sequence}`;
-      const inputHash = hashValue({
+      const key = message.options?.key ?? `${message.phase || "default"}:${message.sequence}`;
+      const preferred = applyWorkflowPreferences(execution.preferences, {
+        phase: message.phase || "default",
+        key,
         prompt: message.prompt,
+        inputOptions: message.options,
+      });
+      const options = this.#normalizeAgentOptions(preferred.options, run.cwd, persona);
+      const agentPrompt = preferred.prompt;
+      const goal = isGoalPrompt(agentPrompt) || undefined;
+      const instructions = [persona?.instructions, preferred.instructions]
+        .filter(Boolean)
+        .join("\n\n");
+      const inputHash = hashValue({
+        prompt: agentPrompt,
         options: cacheKeyOptions(options),
       });
       const legacyOptions = {
@@ -643,27 +669,27 @@ export class WorkflowManager {
       const acceptedSemanticHashes = new Set([
         inputHash,
         hashValue({
-          prompt: message.prompt,
+          prompt: agentPrompt,
           options: cacheKeyOptions(legacyOptions),
         }),
       ]);
       const acceptedInputHashes = new Set([
         inputHash,
-        hashValue({ prompt: message.prompt, options }),
-        hashValue({ prompt: message.prompt, options: legacyOptions }),
+        hashValue({ prompt: agentPrompt, options }),
+        hashValue({ prompt: agentPrompt, options: legacyOptions }),
       ]);
       const matchesInput = (record) => {
         if (!record) return false;
         if (acceptedInputHashes.has(record.inputHash)) return true;
         if (!record.options) return false;
         const recordedInputHash = hashValue({
-          prompt: message.prompt,
+          prompt: agentPrompt,
           options: record.options,
         });
         if (recordedInputHash !== record.inputHash) return false;
         return acceptedSemanticHashes.has(
           hashValue({
-            prompt: message.prompt,
+            prompt: agentPrompt,
             options: cacheKeyOptions(record.options),
           }),
         );
@@ -688,6 +714,7 @@ export class WorkflowManager {
           sequence: message.sequence,
           threadId: cached.threadId,
           turnId: cached.turnId,
+          goal: cached.goal,
           worktreePath: cached.worktreePath,
           worktreeKept: cached.worktreeKept,
         });
@@ -722,6 +749,8 @@ export class WorkflowManager {
         inputHash,
         transcriptPath,
         options,
+        goal,
+        preferenceRules: preferred.matchedRules,
         resumedMidTurn: continuation?.digest ? true : undefined,
       });
       await this.#touch(run);
@@ -741,8 +770,8 @@ export class WorkflowManager {
               continuation.digest,
               continuation.startedAt,
               worktree?.reused ?? false,
-            ) + message.prompt
-          : message.prompt;
+            ) + agentPrompt
+          : agentPrompt;
         const response = await this.semaphore.run(
           async () => {
             if (execution.abortController.signal.aborted) {
@@ -764,6 +793,8 @@ export class WorkflowManager {
               inputHash,
               transcriptPath,
               options,
+              goal,
+              preferenceRules: preferred.matchedRules,
               worktreePath: worktree?.path,
               resumedMidTurn: continuation?.digest ? true : undefined,
               worktreeReused: worktree?.reused || undefined,
@@ -778,8 +809,9 @@ export class WorkflowManager {
             try {
               return await this.backend.runAgent({
                 prompt,
+                originalPrompt: agentPrompt,
                 options: worktree ? { ...options, cwd: worktree.path } : options,
-                instructions: persona?.instructions,
+                instructions: instructions || undefined,
                 signal: timed.signal,
                 onEvent: (event) => transcript.append({ at: new Date().toISOString(), event }),
               });
@@ -812,6 +844,7 @@ export class WorkflowManager {
           result: jsonClone(response.result, "agent result"),
           threadId: response.threadId,
           turnId: response.turnId,
+          goal,
           usage: response.usage,
           transcriptPath,
           worktreePath: worktreeState?.path,
@@ -847,6 +880,7 @@ export class WorkflowManager {
             : Date.parse(failedAt) - Date.parse(queuedAt),
           executionMs: startedAt ? Date.parse(failedAt) - Date.parse(startedAt) : 0,
           error: serializeError(error),
+          goal,
           transcriptPath,
           worktreePath: worktreeState?.path,
           worktreeKept: worktreeState?.kept,
@@ -989,6 +1023,7 @@ export class WorkflowManager {
       schema: input.schema,
       cwd: input.cwd ?? runCwd,
       timeoutMs: input.timeoutMs ?? DEFAULT_AGENT_TIMEOUT_MS,
+      fallbackModels: input.fallbackModels,
     };
     if (input.agentType !== undefined) {
       options.agentType = input.agentType;
@@ -1000,6 +1035,9 @@ export class WorkflowManager {
       }
       options.isolation = "worktree";
     }
+    if (input.preferenceHash !== undefined) {
+      options.preferenceHash = input.preferenceHash;
+    }
     if (options.key !== undefined && (typeof options.key !== "string" || !options.key.trim())) {
       throw new Error("agent key must be a non-empty string.");
     }
@@ -1008,6 +1046,17 @@ export class WorkflowManager {
     }
     if (typeof options.model !== "string" || !options.model.trim()) {
       throw new Error("agent model must be a non-empty string.");
+    }
+    if (options.fallbackModels !== undefined) {
+      if (
+        !Array.isArray(options.fallbackModels) ||
+        options.fallbackModels.some(
+          (model) => typeof model !== "string" || !model.trim(),
+        )
+      ) {
+        throw new Error("agent fallbackModels must be an array of non-empty model names.");
+      }
+      options.fallbackModels = [...new Set(options.fallbackModels.map((model) => model.trim()))];
     }
     if (options.provider !== undefined) {
       if (typeof options.provider !== "string" || !/^[a-z][a-z0-9-]*$/i.test(options.provider)) {

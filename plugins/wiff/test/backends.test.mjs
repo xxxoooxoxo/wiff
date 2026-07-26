@@ -8,6 +8,7 @@ import {
   buildCodexAppServerArgs,
   CodexBackend,
   parseCodexMcpServerNames,
+  parseGoalDirective,
 } from "../src/backends/codex.mjs";
 import { BackendRouter, inferProvider } from "../src/backends/index.mjs";
 
@@ -60,6 +61,86 @@ process.stdin.on("end", () => {
 });
 `;
 
+const CODEX_STUB_SOURCE = `#!/usr/bin/env node
+const readline = require("node:readline");
+let goal = null;
+let turnCount = 0;
+const inputs = [];
+const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
+readline.createInterface({ input: process.stdin }).on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialized") return;
+  if (message.method === "initialize") {
+    send({ id: message.id, result: {} });
+    return;
+  }
+  if (message.method === "thread/start") {
+    send({ id: message.id, result: { thread: { id: "thread-goal" } } });
+    return;
+  }
+  if (message.method === "thread/goal/set") {
+    goal = {
+      threadId: message.params.threadId,
+      objective: message.params.objective,
+      status: "active",
+      tokenBudget: null,
+      tokensUsed: 0,
+      timeUsedSeconds: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    send({ id: message.id, result: { goal } });
+    send({ method: "thread/goal/updated", params: { threadId: goal.threadId, turnId: null, goal } });
+    return;
+  }
+  if (message.method === "thread/goal/get") {
+    send({ id: message.id, result: { goal } });
+    return;
+  }
+  if (message.method === "turn/start") {
+    turnCount += 1;
+    inputs.push(message.params.input[0].text);
+    const turnId = "turn-" + turnCount;
+    send({ id: message.id, result: { turn: { id: turnId } } });
+    setImmediate(() => {
+      if (goal) {
+        goal = {
+          ...goal,
+          status:
+            goal.objective.includes("block")
+              ? "blocked"
+              : turnCount >= 2
+                ? "complete"
+                : "active",
+          tokensUsed: turnCount * 10,
+          updatedAt: turnCount + 1,
+        };
+        send({
+          method: "thread/goal/updated",
+          params: { threadId: goal.threadId, turnId, goal },
+        });
+      }
+      send({
+        method: "item/completed",
+        params: {
+          threadId: "thread-goal",
+          turnId,
+          item: { type: "agentMessage", text: inputs.join(" -> ") },
+        },
+      });
+      send({
+        method: "thread/tokenUsage/updated",
+        params: { threadId: "thread-goal", tokenUsage: { total: { totalTokens: turnCount * 10 } } },
+      });
+      send({
+        method: "turn/completed",
+        params: { threadId: "thread-goal", turn: { id: turnId, status: "completed" } },
+      });
+    });
+  }
+});
+`;
+
 async function withStub(runTest) {
   const dir = await mkdtemp(path.join(os.tmpdir(), "wiff-claude-stub-"));
   const command = path.join(dir, "claude-stub");
@@ -81,8 +162,26 @@ async function withStub(runTest) {
   }
 }
 
+async function withCodexStub(runTest) {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "wiff-codex-stub-"));
+  const command = path.join(dir, "codex-stub");
+  await writeFile(command, CODEX_STUB_SOURCE, "utf8");
+  await chmod(command, 0o755);
+  const backend = new CodexBackend({ command, mcpServerNames: [], requestTimeoutMs: 1_000 });
+  try {
+    await runTest({ backend, cwd: dir });
+  } finally {
+    await backend.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 function options(cwd, overrides = {}) {
   return { model: "claude-sonnet-5", effort: "high", sandbox: "read-only", cwd, ...overrides };
+}
+
+function codexOptions(cwd, overrides = {}) {
+  return { model: "gpt-5.6-sol", effort: "low", sandbox: "read-only", cwd, ...overrides };
 }
 
 test("inferProvider maps model prefixes", () => {
@@ -97,6 +196,14 @@ test("inferProvider maps model prefixes", () => {
   assert.equal(inferProvider("gemini-2.5-pro"), "gemini");
   assert.equal(inferProvider("mystery-model"), null);
   assert.equal(inferProvider(undefined), null);
+});
+
+test("parses /goal agent directives and rejects an empty objective", () => {
+  assert.equal(parseGoalDirective("/goal make the tests pass"), "make the tests pass");
+  assert.equal(parseGoalDirective("  /goal\n  make the tests pass\n"), "make the tests pass");
+  assert.equal(parseGoalDirective("ordinary prompt"), null);
+  assert.equal(parseGoalDirective("/goalkeeper is not a command"), null);
+  assert.throws(() => parseGoalDirective("/goal   "), /non-empty objective/);
 });
 
 test("Codex app-server startup disables every configured MCP server", () => {
@@ -150,6 +257,43 @@ test("Codex backend retries MCP discovery after a transient failure", async () =
   await backend.close();
 });
 
+test("Codex /goal stages continue on one thread until the goal completes", async () => {
+  await withCodexStub(async ({ backend, cwd }) => {
+    const events = [];
+    const response = await backend.runAgent({
+      prompt: "/goal make the tests pass",
+      options: codexOptions(cwd),
+      signal: new AbortController().signal,
+      onEvent: (event) => events.push(event),
+    });
+
+    assert.equal(
+      response.result,
+      "make the tests pass -> Continue working toward the active goal. Inspect the current state and take the next useful actions. Only mark the goal complete when its objective is genuinely satisfied.",
+    );
+    assert.equal(response.threadId, "thread-goal");
+    assert.equal(response.turnId, "turn-2");
+    assert.equal(response.usage.total.totalTokens, 20);
+    assert.equal(
+      events.filter((event) => event.method === "thread/goal/updated").at(-1).params.goal.status,
+      "complete",
+    );
+  });
+});
+
+test("Codex /goal stages fail when the goal becomes blocked", async () => {
+  await withCodexStub(async ({ backend, cwd }) => {
+    await assert.rejects(
+      backend.runAgent({
+        prompt: "/goal block on missing credentials",
+        options: codexOptions(cwd),
+        signal: new AbortController().signal,
+      }),
+      /stopped before completion with status "blocked"/,
+    );
+  });
+});
+
 test("router picks backends by provider, model prefix, then default", async () => {
   const created = [];
   const fake = (name) => () => {
@@ -187,9 +331,86 @@ test("router picks backends by provider, model prefix, then default", async () =
     router.runAgent({ options: { model: "gemini-2.5-pro" } }),
     /No backend registered for provider "gemini"/,
   );
+  await assert.rejects(
+    router.runAgent({
+      prompt: "/goal finish the task",
+      options: { model: "claude-opus-4-8" },
+    }),
+    /require the Codex backend/,
+  );
 
   await router.close();
   assert.ok(created.every((backend) => backend.closed));
+});
+
+test("router follows ordered fallback models and records the transition", async () => {
+  const attempts = [];
+  const events = [];
+  const router = new BackendRouter({
+    defaultProvider: "codex",
+    factories: {
+      claude: () => ({
+        async runAgent(request) {
+          attempts.push(request.options.model);
+          throw new Error("Claude unavailable");
+        },
+      }),
+      codex: () => ({
+        async runAgent(request) {
+          attempts.push(request.options.model);
+          return { result: "fallback-result" };
+        },
+      }),
+    },
+  });
+
+  const response = await router.runAgent({
+    prompt: "do the work",
+    options: {
+      model: "claude-opus-5",
+      fallbackModels: ["gpt-5.6-sol"],
+    },
+    onEvent: (event) => events.push(event),
+  });
+
+  assert.equal(response.result, "fallback-result");
+  assert.deepEqual(attempts, ["claude-opus-5", "gpt-5.6-sol"]);
+  assert.equal(events[0].method, "workflow/agentFallback");
+  assert.equal(events[0].params.nextModel, "gpt-5.6-sol");
+  await router.close();
+});
+
+test("a Codex fallback can satisfy /goal when the primary backend cannot", async () => {
+  let codexRequest;
+  const router = new BackendRouter({
+    defaultProvider: "codex",
+    factories: {
+      claude: () => ({
+        async runAgent() {
+          throw new Error("Claude should not receive a native goal");
+        },
+      }),
+      codex: () => ({
+        async runAgent(request) {
+          codexRequest = request;
+          return { result: "goal-fallback-result" };
+        },
+      }),
+    },
+  });
+
+  const response = await router.runAgent({
+    prompt: "/goal finish safely",
+    options: {
+      model: "claude-opus-5",
+      fallbackModels: ["gpt-5.6-sol"],
+    },
+  });
+
+  assert.equal(response.result, "goal-fallback-result");
+  assert.equal(codexRequest.options.model, "gpt-5.6-sol");
+  assert.equal(codexRequest.goalObjective, "finish safely");
+  await router.close();
 });
 
 test("router aggregates model listings and captures per-provider failures", async () => {
@@ -215,10 +436,21 @@ test("router aggregates model listings and captures per-provider failures", asyn
   assert.deepEqual(backends.bare.models, []);
 });
 
-test("claude backend lists its stable model aliases", async () => {
+test("claude backend lists current model ids and moving family aliases", async () => {
   const models = await new ClaudeBackend().listModels();
-  assert.deepEqual(models.map((model) => model.id), ["fable", "opus", "sonnet", "haiku"]);
+  assert.deepEqual(models.map((model) => model.id), [
+    "claude-fable-5",
+    "claude-opus-5",
+    "claude-sonnet-5",
+    "claude-haiku-4-5",
+    "fable",
+    "opus",
+    "sonnet",
+    "haiku",
+  ]);
   assert.ok(models.every((model) => model.efforts.includes("xhigh")));
+  assert.match(models.find((model) => model.id === "claude-opus-5").description, /agentic coding/);
+  assert.match(models.find((model) => model.id === "opus").note, /Moving family alias/);
 });
 
 test("router rejects an unknown default provider", () => {
