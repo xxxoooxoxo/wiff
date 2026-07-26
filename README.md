@@ -4,7 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/%40xxxoooxoxo%2Fwiff?label=npm&color=cb3837)](https://www.npmjs.com/package/@xxxoooxoxo/wiff) [![MCP Registry](https://img.shields.io/badge/MCP_Registry-io.github.xxxoooxoxo%2Fwiff-6b46c1)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.xxxoooxoxo/wiff) ![MIT License](https://img.shields.io/badge/license-MIT-blue) ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
 
-Fan a task out to a fleet of agents with a small script instead of a prayer. You write ordinary JavaScript with `agent()`, `parallel()`, and `pipeline()`; the runtime executes it in the background, journals every step, and — when a run dies halfway through — resumes it without re-paying for a single completed agent. The engine is a plain MCP server with durable on-disk state, so the same run can be started, watched, resumed, or cancelled from **any** MCP client — Codex, Claude Code, Cursor, or a cron job — while each child runs on Codex, Claude, Cursor, or Kimi.
+Fan a task out to a fleet of agents with a small script instead of a prayer. You write ordinary JavaScript with `agent()`, `/goal` stages, `parallel()`, and `pipeline()`; the runtime executes it in the background, journals every step, and — when a run dies halfway through — resumes it without re-paying for a single completed agent. The engine is a plain MCP server with durable on-disk state, so the same run can be started, watched, resumed, or cancelled from **any** MCP client — Codex, Claude Code, Cursor, or a cron job — while each child runs on Codex, Claude, Cursor, or Kimi.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/run-light.png">
@@ -41,6 +41,51 @@ return await parallel(
   ),
 );
 ```
+
+When one stage must keep working until a condition is genuinely satisfied, make it a native Codex
+goal:
+
+```js
+phase("Verify and repair");
+await agent("/goal Make the unit tests pass and verify the final run.", {
+  key: "tests-green",
+  sandbox: "workspace-write",
+  timeoutMs: 30 * 60 * 1_000,
+});
+```
+
+Wiff holds the workflow at that statement and continues the same Codex thread while its goal is
+active. The next stage starts only after the worker marks the goal complete; blocked, paused, or
+limited goals fail explicitly.
+
+Put durable preferences in `~/.wiff/config.json`, with optional project overrides in
+`<cwd>/.wiff/config.json`:
+
+```json
+{
+  "version": 1,
+  "instructions": "Verify before reporting success.",
+  "defaults": {
+    "model": "claude-sonnet-5",
+    "fallbackModels": ["gpt-5.6-sol"]
+  },
+  "rules": [
+    {
+      "name": "fix-until-green",
+      "when": { "phase": ["Fix", "Repair"] },
+      "goal": "Relevant tests must pass.",
+      "options": {
+        "model": "gpt-5.6-sol",
+        "effort": "high"
+      }
+    }
+  ]
+}
+```
+
+Defaults fill missing agent options; matching rules are explicit user policy and override generated
+workflow options. Instructions are injected alongside the task, ordered fallback models may cross
+backends, and applicable preference changes invalidate cached results on resume.
 
 ## Why
 
@@ -109,7 +154,8 @@ The Codex *plugin* is just packaging. The engine underneath is a plain stdio MCP
 MCP-speaking harness can orchestrate wiff workflows. The mental model: **both the orchestrator
 and the workers are pluggable** — whoever drives, each `agent()` child runs on a backend chosen
 from its model name: `gpt-*`/`o*` models run as native Codex threads via a local
-`codex app-server`, `claude-*`/`opus`/`sonnet`/`haiku`/`fable` models run as headless `claude`
+`codex app-server`; current `claude-fable-5`, `claude-opus-5`, `claude-sonnet-5`, and
+`claude-haiku-4-5` models—or the moving `fable`/`opus`/`sonnet`/`haiku` aliases—run as headless `claude`
 agents, `composer-*` models run through the official Cursor SDK (`@cursor/sdk`) in-process, and
 `kimi-code/*` models run as headless `kimi` processes. A workflow can mix them freely
 (`provider: "codex" | "claude" | "cursor" | "kimi"` overrides the inference, `WIFF_BACKEND`
@@ -197,7 +243,7 @@ npx -p @xxxoooxoxo/wiff wiff-viewer    # http://127.0.0.1:4979  (--port / --root
 # or from a checkout: cd plugins/wiff && npm run viewer
 ```
 
-Zero dependencies, read-only over the run files, so it can watch runs owned by any process. A live strip across the top shows **every queued or running agent in every run**, including queue time and what executing agents are doing now (their latest command, file edit, or thought, tailed from the transcript). Owner heartbeats flag stalled hosts. Below that: per-phase agent cards with live status lines, a gantt timeline, token counts, kept worktrees, and a click-through live-tailing transcript drawer. Light and dark themes.
+Zero dependencies, read-only over the run files, so it can watch runs owned by any process. A live strip across the top shows **every queued or running agent in every run**, including queue time and what executing agents are doing now (their latest command, file edit, or thought, tailed from the transcript). Owner heartbeats flag stalled hosts. Below that: per-phase agent cards with live status lines, a gantt timeline, token counts, kept worktrees, and a click-through live-tailing transcript drawer. Goal nodes are called out as queued, active, met, failed, or replayed. Light and dark themes.
 
 <img alt="The transcript drawer open over a completed run, live-tailing one agent's transcript: its final findings report followed by raw token-usage and turn-completion events." src="docs/screenshots/transcript-dark.png">
 

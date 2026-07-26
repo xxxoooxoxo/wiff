@@ -4,7 +4,7 @@ import { WorkflowManager } from "./runtime.mjs";
 import { serializeError } from "./util.mjs";
 
 const SERVER_NAME = "wiff";
-const SERVER_VERSION = "0.6.1";
+const SERVER_VERSION = "0.7.0";
 const CHILD_MODE = process.env.CODEX_WORKFLOW_CHILD === "1";
 
 const tools = [
@@ -12,7 +12,7 @@ const tools = [
     name: "workflow_start",
     title: "Start or Resume an Agent Workflow",
     description:
-      "Launch a deterministic JavaScript workflow in the background, or resume a previous run without repeating successful unchanged agent calls. Always pass the caller's absolute working directory as cwd.",
+      "Launch a deterministic JavaScript workflow in the background, or resume a previous run without repeating successful unchanged agent calls. User and project preferences are loaded from Wiff config. Always pass the caller's absolute working directory as cwd.",
     inputSchema: {
       type: "object",
       properties: {
@@ -115,6 +115,9 @@ function summarizeRun(run) {
     run.name ? `Name: ${run.name}` : null,
     run.phase ? `Phase: ${run.phase}` : null,
     `Agents: ${run.stats?.completed ?? 0} completed, ${run.stats?.failed ?? 0} failed, ${run.stats?.cached ?? 0} cached, ${run.stats?.queued ?? 0} queued, ${run.stats?.running ?? 0} executing`,
+    run.preferenceSources?.length
+      ? `Preferences: ${run.preferenceSources.map((source) => source.path).join(", ")}`
+      : null,
     run.status === "running" && run.ownerResponsive === false
       ? `Owner: stalled (${Math.round((run.heartbeatAgeMs ?? 0) / 1_000)}s since heartbeat)`
       : null,
@@ -178,7 +181,7 @@ async function handleRequest(message) {
       serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
       instructions: CHILD_MODE
         ? "Workflow tools are intentionally disabled inside workflow child agents to prevent recursive orchestration."
-        : "Use workflows for deterministic fan-out, pipelines, and resumable work. After workflow_start, call workflow_wait until the run is terminal. Parallel writes to one checkout must be serialized.",
+        : "Use workflows for deterministic fan-out, pipelines, and resumable work. Wiff automatically applies user and project preferences from its config files. After workflow_start, call workflow_wait until the run is terminal. Parallel writes to one checkout must be serialized.",
     });
     return;
   }

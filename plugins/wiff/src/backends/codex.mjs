@@ -16,6 +16,28 @@ function deferred() {
 }
 
 const MCP_SERVER_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const ACTIVE_GOAL_STATUS = "active";
+const COMPLETE_GOAL_STATUS = "complete";
+const GOAL_CONTINUATION_PROMPT =
+  "Continue working toward the active goal. Inspect the current state and take the next useful actions. " +
+  "Only mark the goal complete when its objective is genuinely satisfied.";
+
+export function parseGoalDirective(prompt) {
+  if (typeof prompt !== "string") return null;
+  const match = /^\s*\/goal(?:\s+([\s\S]*))?$/.exec(prompt);
+  if (!match) return null;
+  const objective = match[1]?.trim();
+  if (!objective) throw new Error("/goal requires a non-empty objective.");
+  return objective;
+}
+
+function initialGoalPrompt(prompt, originalPrompt, objective) {
+  if (prompt === originalPrompt) return objective;
+  if (prompt.endsWith(originalPrompt)) {
+    return `${prompt.slice(0, -originalPrompt.length)}${objective}`;
+  }
+  return prompt;
+}
 
 export function parseCodexMcpServerNames(stdout) {
   const listing = JSON.parse(stdout);
@@ -159,7 +181,7 @@ export class CodexBackend {
       clientInfo: {
         name: "wiff",
         title: "wiff",
-        version: "0.6.1",
+        version: "0.7.0",
       },
       capabilities: { experimentalApi: true },
     });
@@ -272,7 +294,15 @@ export class CodexBackend {
       }));
   }
 
-  async runAgent({ prompt, options, instructions, signal, onEvent }) {
+  async runAgent({
+    prompt,
+    originalPrompt = prompt,
+    goalObjective = parseGoalDirective(originalPrompt),
+    options,
+    instructions,
+    signal,
+    onEvent,
+  }) {
     await this.start();
     if (signal?.aborted) throw signal.reason ?? new Error("Agent aborted.");
 
@@ -305,18 +335,8 @@ export class CodexBackend {
 
     let abortListener;
     try {
-      const turnParams = {
-        threadId,
-        input: [{ type: "text", text: prompt }],
-        model: options.model,
-        effort: options.effort,
-      };
-      if (options.schema !== undefined) turnParams.outputSchema = options.schema;
-      const turnResponse = await this.#request("turn/start", turnParams);
-      context.turnId = turnResponse?.turn?.id;
-      if (!context.turnId) throw new Error("Codex app-server did not return a turn id.");
-
       abortListener = () => {
+        if (!context.turnId) return;
         this.#request(
           "turn/interrupt",
           { threadId, turnId: context.turnId },
@@ -324,16 +344,60 @@ export class CodexBackend {
         ).catch(() => {});
       };
       signal?.addEventListener("abort", abortListener, { once: true });
-      if (signal?.aborted) abortListener();
-
-      const turn = await context.completion.promise;
-      if (signal?.aborted) throw signal.reason ?? new Error("Agent aborted.");
-      if (turn?.status !== "completed") {
-        const error = turn?.error ? JSON.stringify(turn.error) : turn?.status ?? "unknown";
-        throw new Error(`Codex agent turn did not complete: ${error}`);
+      if (goalObjective !== null) {
+        await this.#request("thread/goal/set", {
+          threadId,
+          objective: goalObjective,
+          status: ACTIVE_GOAL_STATUS,
+        });
       }
-      if (typeof context.finalMessage !== "string") {
-        throw new Error("Codex agent completed without a final message.");
+
+      let turnPrompt =
+        goalObjective === null
+          ? prompt
+          : initialGoalPrompt(prompt, originalPrompt, goalObjective);
+      let goal;
+      do {
+        if (signal?.aborted) throw signal.reason ?? new Error("Agent aborted.");
+        context.completion = deferred();
+        context.finalMessage = undefined;
+        context.turnId = undefined;
+
+        const turnParams = {
+          threadId,
+          input: [{ type: "text", text: turnPrompt }],
+          model: options.model,
+          effort: options.effort,
+        };
+        if (options.schema !== undefined) turnParams.outputSchema = options.schema;
+        const turnResponse = await this.#request("turn/start", turnParams);
+        context.turnId = turnResponse?.turn?.id;
+        if (!context.turnId) throw new Error("Codex app-server did not return a turn id.");
+        if (signal?.aborted) abortListener();
+
+        const turn = await context.completion.promise;
+        if (signal?.aborted) throw signal.reason ?? new Error("Agent aborted.");
+        if (turn?.status !== "completed") {
+          const error = turn?.error ? JSON.stringify(turn.error) : turn?.status ?? "unknown";
+          throw new Error(`Codex agent turn did not complete: ${error}`);
+        }
+        if (typeof context.finalMessage !== "string") {
+          throw new Error("Codex agent completed without a final message.");
+        }
+
+        if (goalObjective === null) break;
+        const response = await this.#request("thread/goal/get", { threadId });
+        goal = response?.goal;
+        if (!goal) throw new Error("Codex goal disappeared before reaching a terminal status.");
+        if (goal.status === ACTIVE_GOAL_STATUS) {
+          turnPrompt = GOAL_CONTINUATION_PROMPT;
+        }
+      } while (goal?.status === ACTIVE_GOAL_STATUS);
+
+      if (goalObjective !== null && goal?.status !== COMPLETE_GOAL_STATUS) {
+        throw new Error(
+          `Codex goal stopped before completion with status "${goal?.status ?? "unknown"}": ${goalObjective}`,
+        );
       }
 
       let result = context.finalMessage;

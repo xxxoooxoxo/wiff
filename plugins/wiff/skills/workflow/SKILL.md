@@ -12,10 +12,14 @@ Use workflow code when the plan itself benefits from deterministic branching, pa
 1. Write a self-contained JavaScript workflow. Start with literal `export const meta = { name, description, phases }`.
 2. Put all context each child needs in its prompt. Child agents inherit project instructions, not the parent conversation.
 3. Use stable `key` values for every reusable `agent()` call.
-4. Launch with `workflow_start`. Always pass the caller's absolute working directory as `cwd`.
-5. Call `workflow_wait` until the run reaches `completed`, `failed`, or `cancelled`. Inspect `runPath` and `journalPath` when diagnosing failure.
-6. Resume failed or interrupted work with `workflow_start({ resumeFromRunId })`. Completed calls with unchanged keys and inputs are replayed from the journal.
-7. Use `workflow_models` before choosing a non-default backend or model when availability is uncertain.
+4. Wiff automatically applies user preferences from `~/.wiff/config.json` and project preferences
+   from `<cwd>/.wiff/config.json`; do not duplicate those instructions in child prompts.
+5. Prefix a Codex agent prompt with `/goal` when that stage must continue across turns until its
+   objective is complete. Give the whole goal stage an appropriate `timeoutMs`.
+6. Launch with `workflow_start`. Always pass the caller's absolute working directory as `cwd`.
+7. Call `workflow_wait` until the run reaches `completed`, `failed`, or `cancelled`. Inspect `runPath` and `journalPath` when diagnosing failure.
+8. Resume failed or interrupted work with `workflow_start({ resumeFromRunId })`. Completed calls with unchanged keys and inputs are replayed from the journal.
+9. Use `workflow_models` before choosing a non-default backend or model when availability is uncertain.
 
 Read [references/api.md](references/api.md) before authoring a non-trivial workflow.
 

@@ -110,15 +110,70 @@ export class ClaudeBackend {
   }
 
   // The claude CLI has no headless model-list command, so report the stable
-  // aliases it resolves itself; full claude-* model ids are also accepted.
+  // aliases it resolves itself plus Anthropic's current generally available
+  // full model ids.
   async listModels() {
     const efforts = ["low", "medium", "high", "xhigh", "max"];
-    const note = "Alias resolved by the claude CLI; full claude-* model ids are also accepted.";
+    const fullIdNote = "Full model id accepted by the claude CLI.";
+    const aliasNote =
+      "Moving family alias resolved by the claude CLI; use a full claude-* id to pin a generation.";
     return [
-      { id: "fable", displayName: "Fable", description: "Latest Claude Fable model.", efforts, note },
-      { id: "opus", displayName: "Opus", description: "Latest Claude Opus model.", efforts, note },
-      { id: "sonnet", displayName: "Sonnet", description: "Latest Claude Sonnet model.", efforts, note },
-      { id: "haiku", displayName: "Haiku", description: "Latest Claude Haiku model.", efforts, note },
+      {
+        id: "claude-fable-5",
+        displayName: "Claude Fable 5",
+        description: "Highest-capability Claude model for long-running agents.",
+        efforts,
+        note: fullIdNote,
+      },
+      {
+        id: "claude-opus-5",
+        displayName: "Claude Opus 5",
+        description: "Claude model for complex agentic coding and enterprise work.",
+        efforts,
+        note: fullIdNote,
+      },
+      {
+        id: "claude-sonnet-5",
+        displayName: "Claude Sonnet 5",
+        description: "Claude model balancing speed and intelligence.",
+        efforts,
+        note: fullIdNote,
+      },
+      {
+        id: "claude-haiku-4-5",
+        displayName: "Claude Haiku 4.5",
+        description: "Fastest generally available Claude model.",
+        efforts,
+        note: fullIdNote,
+      },
+      {
+        id: "fable",
+        displayName: "Fable (latest)",
+        description: "Latest Claude Fable model.",
+        efforts,
+        note: aliasNote,
+      },
+      {
+        id: "opus",
+        displayName: "Opus (latest)",
+        description: "Latest Claude Opus model.",
+        efforts,
+        note: aliasNote,
+      },
+      {
+        id: "sonnet",
+        displayName: "Sonnet (latest)",
+        description: "Latest Claude Sonnet model.",
+        efforts,
+        note: aliasNote,
+      },
+      {
+        id: "haiku",
+        displayName: "Haiku (latest)",
+        description: "Latest Claude Haiku model.",
+        efforts,
+        note: aliasNote,
+      },
     ];
   }
 

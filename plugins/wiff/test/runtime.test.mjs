@@ -22,8 +22,8 @@ class FakeBackend {
     this.#releaseBlockedAgent();
   }
 
-  async runAgent({ prompt, options, instructions, signal, onEvent }) {
-    const call = { prompt, options, instructions };
+  async runAgent({ prompt, originalPrompt, options, instructions, signal, onEvent }) {
+    const call = { prompt, originalPrompt, options, instructions };
     this.calls.push(call);
     if (prompt.startsWith("WRITE:")) {
       await writeFile(path.join(options.cwd, prompt.slice("WRITE:".length)), "made by agent\n");
@@ -343,6 +343,91 @@ test("normalizes the provider option and passes it to the backend", async () => 
     assert.equal(run.status, "completed");
     assert.equal(backend.calls[0].options.provider, "claude");
     assert.equal(backend.calls[0].options.model, "claude-opus-4-8");
+  });
+});
+
+test("applies Wiff preferences to prompts, instructions, models, and cache identity", async () => {
+  await withManager(async ({ manager, backend, stateRoot }) => {
+    const configPath = path.join(stateRoot, "config.json");
+    const writePreferences = (instructions) =>
+      writeFile(
+        configPath,
+        JSON.stringify({
+          version: 1,
+          instructions,
+          defaults: {
+            model: "claude-sonnet-5",
+            fallbackModels: ["gpt-5.6-sol"],
+          },
+          rules: [
+            {
+              name: "repair-until-green",
+              when: { phase: "Repair", promptIncludes: "fix" },
+              instructions: "Verify the repair before reporting success.",
+              goal: "Relevant tests must pass.",
+              options: {
+                model: "gpt-5.6-sol",
+                effort: "high",
+                fallbackModels: ["claude-opus-5"],
+              },
+            },
+          ],
+        }),
+      );
+    await writePreferences("Treat these as explicit user preferences.");
+
+    const script = `
+      export const meta = { name: "preferences", description: "Apply user preferences" };
+      phase("Repair");
+      return await agent("Fix the auth bug", { key: "repair" });
+    `;
+    const first = await waitForTerminal(
+      manager,
+      (await manager.start({ script, cwd: process.cwd() })).runId,
+    );
+    assert.equal(first.status, "completed");
+    assert.equal(first.preferenceSources.length, 1);
+    assert.match(backend.calls[0].originalPrompt, /^\/goal Fix the auth bug/);
+    assert.match(backend.calls[0].originalPrompt, /Relevant tests must pass/);
+    assert.match(backend.calls[0].instructions, /explicit user preferences/);
+    assert.match(backend.calls[0].instructions, /Verify the repair/);
+    assert.equal(backend.calls[0].options.model, "gpt-5.6-sol");
+    assert.equal(backend.calls[0].options.effort, "high");
+    assert.deepEqual(backend.calls[0].options.fallbackModels, ["claude-opus-5"]);
+    assert.ok(backend.calls[0].options.preferenceHash);
+    const firstJournal = (await readFile(first.journalPath, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    for (const type of ["agent.queued", "agent.started", "agent.completed"]) {
+      assert.equal(
+        firstJournal.find((event) => event.type === type)?.goal,
+        true,
+        `${type} exposes goal state to run viewers`,
+      );
+    }
+
+    const cached = await waitForTerminal(
+      manager,
+      (await manager.start({ resumeFromRunId: first.runId })).runId,
+    );
+    assert.equal(cached.stats.cached, 1);
+    assert.equal(backend.calls.length, 1);
+    const cachedJournal = (await readFile(cached.journalPath, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.equal(cachedJournal.findLast((event) => event.type === "agent.cached")?.goal, true);
+
+    await writePreferences("Updated explicit user preferences.");
+    const changed = await waitForTerminal(
+      manager,
+      (await manager.start({ resumeFromRunId: first.runId })).runId,
+    );
+    assert.equal(changed.status, "completed");
+    assert.equal(changed.stats.cached, 0);
+    assert.equal(backend.calls.length, 2, "preference edits invalidate cached agent results");
+    assert.match(backend.calls[1].instructions, /Updated explicit user preferences/);
   });
 });
 
@@ -761,6 +846,7 @@ test("interrupted agents resume mid-turn with a transcript digest injected", asy
     assert.match(retryPrompt, /^\[resume\]/);
     assert.match(retryPrompt, /ran: echo checkpoint-alpha/);
     assert.match(retryPrompt, /WAIT$/, "original prompt stays at the end");
+    assert.equal(backend.calls[1].originalPrompt, "WAIT");
     assert.equal(final.stats.cached, 0);
   });
 });

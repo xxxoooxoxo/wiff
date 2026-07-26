@@ -1,7 +1,8 @@
 import { ClaudeBackend } from "./claude.mjs";
-import { CodexBackend } from "./codex.mjs";
+import { CodexBackend, parseGoalDirective } from "./codex.mjs";
 import { CursorBackend } from "./cursor.mjs";
 import { KimiBackend } from "./kimi.mjs";
+import { serializeError } from "../util.mjs";
 
 /**
  * Backend contract
@@ -10,10 +11,12 @@ import { KimiBackend } from "./kimi.mjs";
  * the runtime. The runtime owns journaling, caching, worktrees, timeouts, and
  * concurrency; a backend only has to run a turn.
  *
- *   runAgent({ prompt, options, instructions, signal, onEvent })
+ *   runAgent({ prompt, originalPrompt, options, instructions, signal, onEvent })
  *     -> Promise<{ result, threadId, turnId, usage }>
  *
  *   prompt        Final prompt text (may include a resume preamble).
+ *   originalPrompt Exact workflow-script prompt, before resume context is added.
+ *                  Codex uses it to recognize `/goal` stages across resumes.
  *   options       Normalized agent options: { model, effort, sandbox, cwd,
  *                 schema?, isolation?, provider?, ... }. cwd already points at
  *                 the agent's worktree when isolation is "worktree".
@@ -122,7 +125,59 @@ export class BackendRouter {
   }
 
   async runAgent(request) {
-    return this.backendFor(this.providerFor(request.options)).runAgent(request);
+    const goalObjective = parseGoalDirective(request.originalPrompt ?? request.prompt);
+    const models = [
+      ...new Set([request.options.model, ...(request.options.fallbackModels ?? [])]),
+    ];
+    const failures = [];
+
+    for (let index = 0; index < models.length; index += 1) {
+      const model = models[index];
+      const options = {
+        ...request.options,
+        model,
+        provider: index === 0 ? request.options.provider : undefined,
+      };
+      const provider = this.providerFor(options);
+      try {
+        if (goalObjective !== null && provider !== "codex") {
+          throw new Error(
+            `/goal agent stages require the Codex backend; received provider "${provider}".`,
+          );
+        }
+        return await this.backendFor(provider).runAgent({
+          ...request,
+          options,
+          goalObjective,
+        });
+      } catch (error) {
+        if (request.signal?.aborted) throw error;
+        failures.push(error);
+        const nextModel = models[index + 1];
+        if (nextModel === undefined) break;
+        try {
+          request.onEvent?.({
+            method: "workflow/agentFallback",
+            params: {
+              failedModel: model,
+              failedProvider: provider,
+              nextModel,
+              error: serializeError(error),
+            },
+          });
+        } catch {
+          // Transcript capture must not break fallback routing.
+        }
+      }
+    }
+
+    if (failures.length === 1) throw failures[0];
+    throw new AggregateError(
+      failures,
+      `All configured agent models failed (${models.join(" -> ")}): ${failures
+        .map((error) => error?.message ?? String(error))
+        .join("; ")}`,
+    );
   }
 
   // Model catalog per provider: { codex: { models: [...] } | { error }, ... }.
