@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
 <style>
   :root {
+    --header-h: 54px;
     --surface: #fffefd;
     --surface-2: #f8f6f4;
     --surface-3: rgb(39 39 42 / 0.06);
@@ -74,7 +75,7 @@
     --active: rgb(255 255 255 / 0.08);
     --overlay: rgb(0 0 0 / 0.58);
     --shadow-xs: 0 1px 0 rgb(255 255 255 / 0.03);
-    --shadow-card: 0 24px 70px rgb(0 0 0 / 0.3);
+    --shadow-card: none;
     --shadow-sheet: -16px 0 48px rgb(0 0 0 / 0.32);
     --running: #74a2f2;
     --good: #52c78a;
@@ -149,7 +150,7 @@
     display: flex;
     align-items: center;
     gap: 14px;
-    min-height: 54px;
+    min-height: var(--header-h);
     padding: 8px 16px;
     border-bottom: 1px solid var(--line);
     background: color-mix(in srgb, var(--surface) 94%, transparent);
@@ -202,16 +203,21 @@
   .side-reset:focus-visible,
   .agent-node:focus-visible,
   .flow-focus:focus-visible,
+  .titlebar-action:focus-visible,
   .drawer-close:focus-visible {
     outline: 2px solid var(--running);
     outline-offset: 2px;
   }
+  .nav-toggle { flex: none; margin-left: -3px; }
+  .nav-toggle svg { fill: currentColor; }
+  .nav-toggle[aria-expanded="true"] { color: var(--ink); background: var(--active); }
 
   .layout {
     display: grid;
     grid-template-columns: 286px minmax(0, 1fr);
     min-height: 0;
   }
+  [data-nav="closed"] .layout { grid-template-columns: minmax(0, 1fr); }
   .runs-sidebar {
     display: flex;
     flex-direction: column;
@@ -222,14 +228,16 @@
     background: var(--surface);
     padding: 10px 8px 0;
   }
+  [data-nav="closed"] .runs-sidebar { display: none; }
   .main-view {
+    /* Container for the workflow view so it reflows on sidebar collapse, not just window resize. */
+    container: stage / inline-size;
     isolation: isolate;
     min-width: 0;
     overflow-y: auto;
     background:
       radial-gradient(circle at 78% -20%, color-mix(in srgb, #f3c7aa 17%, transparent), transparent 42%),
       var(--canvas);
-    padding: clamp(16px, 2.5vw, 34px);
   }
 
   .side-tools {
@@ -355,11 +363,13 @@
   .run-pin:hover { background: var(--active); color: var(--ink-2); }
   .run-pin[aria-pressed="true"] { color: var(--warn); }
   .run-pin svg { fill: currentColor; }
-  .run-pin .hit { display: none; }
+  .run-pin .hit,
+  .nav-toggle .hit { display: none; }
   @media (pointer: coarse) {
     .run-pin { opacity: 0.6; }
     .run-pin[aria-pressed="true"] { opacity: 1; }
-    .run-pin .hit {
+    .run-pin .hit,
+    .nav-toggle .hit {
       display: block;
       position: absolute;
       top: 50%;
@@ -446,7 +456,8 @@
   .pill.cancelled, .pill.interrupted, .pill.stalled { color: var(--warn); background: var(--warn-bg); }
   .pill.cached { color: var(--cached); background: var(--cached-bg); }
 
-  .workflow-shell { width: min(100%, 1500px); margin-inline: auto; }
+  /* Padding lives here, not on .main-view — a container query can't style its own container. */
+  .workflow-shell { width: min(100%, 1500px); margin-inline: auto; padding: clamp(16px, 2.5vw, 34px); }
   .workflow-card {
     overflow: hidden;
     border: 1px solid var(--line);
@@ -518,6 +529,21 @@
     background: linear-gradient(145deg, #ffe4a4, #ffb671 62%, #ff8f72);
     box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.5);
   }
+  .titlebar-action {
+    display: none;
+    place-items: center;
+    flex: none;
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 9px;
+    padding: 0;
+    background: var(--surface-3);
+    color: var(--ink-2);
+    cursor: pointer;
+    font-size: 15px;
+  }
+  .titlebar-action:hover { color: var(--ink); }
   .workflow-error {
     border-bottom: 1px solid color-mix(in srgb, var(--bad) 18%, transparent);
     padding: 9px 20px;
@@ -568,8 +594,11 @@
     stroke-dasharray: 3 8;
   }
   @keyframes edge-flow { to { stroke-dashoffset: -14; } }
+  @keyframes rail-flow { to { background-position: 0 14px; } }
 
   .flow-grid {
+    /* Read by JS (isStacked) so connector math and CSS never disagree about the orientation. */
+    --flow-mode: columns;
     position: relative;
     z-index: 2;
     display: grid;
@@ -753,6 +782,7 @@
     white-space: nowrap;
   }
   .node-duration {
+    flex: none;
     margin-left: auto;
     color: var(--ink-3);
     font-variant-numeric: tabular-nums;
@@ -824,6 +854,7 @@
   .workflow-progress {
     display: grid;
     grid-template-columns: auto minmax(100px, 1fr) auto;
+    grid-template-areas: "label dots summary";
     align-items: center;
     gap: 12px;
     min-height: 50px;
@@ -831,8 +862,26 @@
     border-top: 1px solid var(--line);
     background: var(--surface);
   }
-  .progress-label { color: var(--ink-2); }
+  .progress-label { grid-area: label; color: var(--ink-2); }
+  .progress-now {
+    grid-area: now;
+    display: none;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+  }
+  .progress-now[hidden] { display: none; }
+  .progress-now b { flex: none; max-width: 45%; overflow: hidden; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+  .progress-now-text {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ink-3);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .progress-now-more { flex: none; color: var(--ink-3); font-variant-numeric: tabular-nums; }
   .progress-dots {
+    grid-area: dots;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -842,6 +891,7 @@
   .progress-dots .dot { width: 8px; height: 8px; }
   .progress-more { color: var(--ink-3); font-size: 10px; }
   .progress-summary {
+    grid-area: summary;
     display: flex;
     align-items: center;
     gap: 14px;
@@ -940,6 +990,7 @@
   }
   .sheet-backdrop.open { display: block; }
   .sheet-backdrop:hover { background: var(--overlay); }
+  #nav-backdrop { z-index: 7; }
   .drawer {
     position: fixed;
     inset: 0 0 0 auto;
@@ -1003,60 +1054,227 @@
     background: var(--surface-2);
   }
 
-  @media (max-width: 900px) {
-    .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  /* ------------------------------------------------------------------
+     Embedded panel mode.
+
+     Two independent axes:
+       - viewport width  -> where the run list lives (page-level shell)
+       - .main-view width -> how the workflow itself lays out (component)
+     The second is a container query so collapsing the sidebar reflows the
+     graph immediately, without waiting for a window resize.
+     ------------------------------------------------------------------ */
+
+  /* Shell: the run list becomes an overlay disclosure. A horizontal strip
+     would cost ~130px of the panel's scarcest resource, its height. */
+  @media (max-width: 940px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .main-view { background: var(--surface); }
     .runs-sidebar {
-      overflow: hidden;
-      border-right: 0;
-      border-bottom: 1px solid var(--line);
-      padding: 8px 12px 10px;
+      position: fixed;
+      inset: var(--header-h) auto 0 0;
+      z-index: 8;
+      width: min(320px, 88vw);
+      box-shadow: 8px 0 34px rgb(24 24 27 / 0.17);
+      transition: transform 180ms ease, visibility 180ms;
     }
-    .side-tools { padding: 0; margin-bottom: 8px; border-bottom: 0; }
-    .chip-row { flex-wrap: nowrap; overflow-x: auto; }
-    .side-list {
+    [data-nav="closed"] .runs-sidebar {
       display: flex;
-      align-items: flex-start;
-      gap: 5px;
-      overflow-x: auto;
-      overflow-y: hidden;
-      padding-bottom: 2px;
+      transform: translateX(-100%);
+      visibility: hidden;
     }
-    .side-list .side-h { flex: none; padding: 10px 4px 4px; }
-    .side-list .run-item { flex: none; width: 240px; }
-    .side-list .empty { flex: 1; padding: 24px; }
-    .main-view { padding: 16px; }
+    [data-nav="open"] #nav-backdrop { display: block; }
   }
 
-  @media (max-width: 640px) {
-    .app-header { gap: 9px; }
+  @media (max-width: 820px) {
+    .app-header { gap: 9px; padding-inline: 10px; }
     .app-header .root { display: none; }
     .theme-label { display: none; }
     #tick { font-size: 11px; }
-    .main-view { padding: 10px; }
-    .workflow-card { border-radius: 18px; }
-    .workflow-titlebar { align-items: flex-start; padding: 13px 14px; }
-    .workflow-heading h2 { font-size: 15px; }
-    .workflow-heading .description { white-space: normal; }
-    .workflow-owner .creator-label,
-    .workflow-owner > span:last-child { display: none; }
-    .flow-stage { padding-inline: 26px; }
-    .workflow-progress { grid-template-columns: auto 1fr; }
-    .progress-summary { grid-column: 1 / -1; justify-content: space-between; }
-    .support-grid { grid-template-columns: 1fr; }
+    .drawer { width: 100%; border-left: 0; }
+    .drawer-header { gap: 8px; padding: 8px 10px; }
+    .drawer-meta { display: none; }
+    .drawer .body { padding: 10px 12px; }
+  }
+
+  /* Workflow view: stack phases down a rail instead of scrolling sideways.
+     Columns only earn their keep once ~3 of them (284px each) fit at once;
+     below that the sideways scroll hides more than the layout shows. */
+  @container stage (max-width: 900px) {
+    .flow-grid { --flow-mode: stacked; grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .workflow-shell { padding: 0 0 16px; }
+    .workflow-card {
+      overflow: visible; /* required for the sticky title/progress bars */
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+    .workflow-titlebar {
+      position: sticky;
+      top: 0;
+      z-index: 4;
+      gap: 10px;
+      min-height: 0;
+      padding: 9px 10px;
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(18px);
+    }
+    .workflow-symbol,
+    .workflow-owner,
+    .flow-focus { display: none; }
+    .titlebar-action { display: grid; }
+    .workflow-heading h2 { font-size: 14px; gap: 6px; }
+    .workflow-heading .description {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      white-space: normal;
+    }
+    .workflow-error { padding-inline: 10px; }
+
+    .flow-viewport {
+      min-height: 0;
+      overflow: visible;
+      background-color: transparent;
+      background-image: none;
+    }
+    .flow-stage { width: 100%; min-height: 0; padding: 12px 10px 4px; }
+    .flow-edges { display: none; }
+
+    .phase-column { position: relative; padding: 0 0 16px 20px; }
+    .phase-column::before {
+      content: "";
+      position: absolute;
+      top: 11px;
+      bottom: 0;
+      left: 5px;
+      width: 2px;
+      border-radius: 999px;
+      background: var(--edge);
+    }
+    .phase-column:last-child::before { bottom: 22px; }
+    .phase-column[data-status="completed"]::before,
+    .phase-column[data-status="cached"]::before { background: color-mix(in srgb, var(--good) 34%, var(--edge)); }
+    .phase-column[data-status="failed"]::before { background: color-mix(in srgb, var(--bad) 42%, var(--edge)); }
+    .phase-column[data-status="running"]::before,
+    .phase-column[data-status="queued"]::before {
+      background: repeating-linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--running) 62%, var(--edge)) 0 7px,
+        transparent 7px 14px
+      );
+      animation: rail-flow 1.2s linear infinite;
+    }
+    .phase-column[data-status="queued"]::before { animation: none; opacity: 0.55; }
+    .phase-heading { min-height: 20px; margin-bottom: 9px; }
+    .phase-index { font-size: 10.5px; }
+    .phase-mode { font-size: 10px; }
+    .phase-hub {
+      position: absolute;
+      top: 5px;
+      left: 0;
+      width: 12px;
+      height: 12px;
+      margin: 0;
+      background: var(--surface);
+    }
+    .phase-column[data-status="completed"] .phase-hub,
+    .phase-column[data-status="cached"] .phase-hub { border-color: var(--good); }
+    .phase-column[data-status="failed"] .phase-hub { border-color: var(--bad); }
+    .phase-column[data-status="running"] .phase-hub,
+    .phase-column[data-status="queued"] .phase-hub { border-color: var(--running); }
+    .phase-nodes { gap: 7px; }
+    .phase-empty { max-width: none; padding: 11px 12px; text-align: left; }
+
+    /* One contained row per agent — the label, model, tags and live line all
+       belong to the same surface instead of floating on the canvas below it. */
+    .agent-node {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      column-gap: 8px;
+      max-width: none;
+      border-radius: 12px;
+      padding: 8px 10px 9px;
+      background: var(--node);
+      box-shadow: var(--shadow-xs), 0 0 0 1px var(--line);
+    }
+    .agent-node:hover { background: color-mix(in srgb, var(--node) 96%, var(--ink)); }
+    .agent-node:disabled:hover { background: var(--node); }
+    .agent-node.running { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 36%, var(--line)); }
+    .agent-node.queued { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 20%, var(--line)); }
+    .agent-node.failed { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--bad) 38%, var(--line)); }
+    .agent-node.goal.running,
+    .agent-node.goal.queued { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 52%, var(--line)); }
+    .agent-node-main,
+    .agent-node:hover .agent-node-main,
+    .agent-node.running .agent-node-main,
+    .agent-node.queued .agent-node-main,
+    .agent-node.failed .agent-node-main,
+    .agent-node.goal.running .agent-node-main,
+    .agent-node.goal.queued .agent-node-main {
+      flex: 1 0 100%;
+      min-height: 0;
+      border-radius: 0;
+      padding: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+    /* Full width is available here, so wrap instead of ellipsis — the columnar
+       260px node had to clip "design:caps+headless+timeout" to "…headles…". */
+    .node-label {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      font-size: 13px;
+      white-space: normal;
+    }
+    .agent-node-owner { flex: 0 1 auto; padding-inline: 0; margin-top: 5px; }
+    .node-tags { flex: 1 1 auto; padding-inline: 0; margin-top: 5px; }
+    .node-activity { flex: 1 0 100%; padding-inline: 0; margin-top: 5px; font-size: 10.5px; }
+    .node-error { flex: 1 0 100%; padding-inline: 0; margin-top: 5px; font-size: 10.5px; }
+    .node-tag,
+    .goal-badge { font-size: 10px; }
+
+    .workflow-progress {
+      position: sticky;
+      bottom: 0;
+      z-index: 4;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: "now now" "dots summary";
+      gap: 3px 10px;
+      min-height: 0;
+      padding: 7px 10px;
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(18px);
+    }
+    .progress-label { display: none; }
+    .progress-now { display: flex; }
+    .progress-summary { gap: 10px; }
+
+    .run-context { padding: 12px 10px 0; }
+    .run-context .path { max-width: 100%; }
+    .support-grid { grid-template-columns: minmax(0, 1fr); margin-inline: 10px; }
     .support-panel.wide { grid-column: auto; }
-    .run-context { padding-inline: 2px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
     .dot.running,
     .node-status.running,
-    .flow-edge.running { animation: none; }
+    .flow-edge.running,
+    .phase-column::before { animation: none; }
+    .runs-sidebar { transition: none; }
     * { scroll-behavior: auto !important; }
   }
 </style>
 </head>
 <body>
 <header class="app-header">
+  <button class="header-button nav-toggle" id="nav-toggle" type="button" aria-expanded="true" aria-controls="runs-sidebar">
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 4.25A.75.75 0 0 1 2.75 3.5h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 4.25Zm0 3.75a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 8Zm0 3.75a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z"/></svg>
+    <span class="sr-only">Toggle run list</span>
+    <span class="hit" aria-hidden="true"></span>
+  </button>
   <div class="app-brand"><span class="app-brand-mark" aria-hidden="true"><span>◇</span></span><h1>wiff</h1></div>
   <span class="root mono" id="root"></span>
   <span class="spacer"></span>
@@ -1064,7 +1282,7 @@
   <button class="header-button" id="theme" type="button" aria-label="Toggle theme"><span aria-hidden="true">◐</span><span class="theme-label">Theme</span></button>
 </header>
 <div class="layout">
-  <aside class="runs-sidebar" aria-label="Workflow runs">
+  <aside class="runs-sidebar" id="runs-sidebar" aria-label="Workflow runs">
     <div class="side-tools">
       <div class="chip-row" id="status-filters" role="group" aria-label="Filter runs by status"></div>
       <div class="side-tools-row">
@@ -1085,6 +1303,7 @@
   </aside>
   <main class="main-view" id="main"><div class="empty">Loading runs…</div></main>
 </div>
+<button class="sheet-backdrop" id="nav-backdrop" type="button" aria-label="Close run list"></button>
 <button class="sheet-backdrop" id="backdrop" type="button" aria-label="Close transcript"></button>
 <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
   <header class="drawer-header">
@@ -1145,6 +1364,24 @@ $("theme").onclick = () => {
   localStorage.setItem("cwf-theme", next);
   requestAnimationFrame(drawConnectors);
 };
+
+// Below this width the run list is an overlay rather than a docked column.
+const navOverlay = matchMedia("(max-width: 940px)");
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+
+function setNav(open, { persist = true } = {}) {
+  document.documentElement.dataset.nav = open ? "open" : "closed";
+  $("nav-toggle").setAttribute("aria-expanded", String(open));
+  $("nav-backdrop").classList.toggle("open", open && navOverlay.matches);
+  // Docked/collapsed is a preference worth keeping; the overlay always reopens closed.
+  if (persist && !navOverlay.matches) store.save("cwf-nav-docked", open);
+  requestAnimationFrame(drawConnectors);
+}
+
+const navOpen = () => document.documentElement.dataset.nav === "open";
+function syncNavToWidth() {
+  setNav(navOverlay.matches ? false : store.load("cwf-nav-docked", true) !== false, { persist: false });
+}
 
 const esc = (value) => String(value ?? "").replace(/[&<>"]/g, (character) => ({
   "&": "&amp;",
@@ -1528,6 +1765,7 @@ function renderSkeleton(run, agents, journal) {
           <h2><span class="title">${esc(run.name ?? run.runId)}</span><span class="workflow-number">#${run.attempt ?? 1}</span>${pill(runStatus)}</h2>
           ${run.description ? `<p class="description">${esc(run.description)}</p>` : ""}
         </div>
+        <button class="titlebar-action" type="button" data-flow-focus aria-label="Jump to active step" title="Jump to active step"><span aria-hidden="true">⌗</span></button>
         <div class="workflow-owner"><span class="creator-label">Creator</span><span class="creator-avatar" aria-hidden="true"></span><span>Wiff</span></div>
       </header>
       ${run.error ? `<div class="workflow-error">${STATUS_ICON.failed} ${esc(run.error.message)}</div>` : ""}
@@ -1535,12 +1773,13 @@ function renderSkeleton(run, agents, journal) {
       <div class="flow-viewport" id="flow-viewport">
         <div class="flow-stage" id="flow-stage" style="--phase-count:${groups.length};--stage-width:${stageWidth}px">
           <svg class="flow-edges" id="flow-edges" aria-hidden="true"></svg>
-          <div class="flow-grid" role="list" aria-label="Workflow phases">${groups.map(phaseColumn).join("")}</div>
+          <div class="flow-grid" id="flow-grid" role="list" aria-label="Workflow phases">${groups.map(phaseColumn).join("")}</div>
         </div>
         <button class="flow-focus" type="button" data-flow-focus aria-label="Focus active workflow step" title="Focus active step">⌗</button>
       </div>
       <footer class="workflow-progress">
         <span class="progress-label">Progress</span>
+        <span class="progress-now" id="progress-now" hidden></span>
         <span class="progress-dots">${progressDots(agents, total)}</span>
         <span class="progress-summary"><span><strong id="progress-count">${done}</strong>/${total || 0}</span><span id="elapsed"></span><span id="token-count">–</span></span>
       </footer>
@@ -1557,7 +1796,9 @@ function renderSkeleton(run, agents, journal) {
 
   requestAnimationFrame(() => {
     drawConnectors();
-    focusFlow(false);
+    // Stacked mode would scroll the title out of view on every re-render; there
+    // the sticky bars carry the status and the jump button stays one tap away.
+    if (!isStacked()) focusFlow(false);
   });
 }
 
@@ -1566,10 +1807,22 @@ function connectorTargets(column) {
   return nodes.length ? nodes : [column.querySelector(".phase-hub")];
 }
 
+// The container query owns the breakpoint; JS reads the mode it picked so the
+// two can never disagree about which orientation is on screen.
+function isStacked() {
+  const grid = $("flow-grid");
+  return !!grid && getComputedStyle(grid).getPropertyValue("--flow-mode").trim() === "stacked";
+}
+
 function drawConnectors() {
   const stage = $("flow-stage");
   const svg = $("flow-edges");
   if (!stage || !svg) return;
+  // Stacked mode draws the vertical rail in CSS instead of SVG edges.
+  if (isStacked()) {
+    svg.innerHTML = "";
+    return;
+  }
   const columns = [...stage.querySelectorAll(".phase-column")];
   const stageRect = stage.getBoundingClientRect();
   const width = stage.scrollWidth;
@@ -1610,8 +1863,17 @@ function focusFlow(smooth = true) {
     ?? columns.find((column) => !["completed", "cached"].includes(column.dataset.status))
     ?? columns.at(-1);
   if (!target) return;
+  const behavior = smooth && !reducedMotion.matches ? "smooth" : "auto";
+  if (isStacked()) {
+    // Stacked mode scrolls the page, clearing the sticky titlebar.
+    const scroller = $("main");
+    const headerHeight = document.querySelector(".workflow-titlebar")?.getBoundingClientRect().height ?? 0;
+    const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top - headerHeight - 8;
+    scroller.scrollBy({ top, behavior });
+    return;
+  }
   const left = Math.max(0, target.offsetLeft - Math.max(24, (viewport.clientWidth - target.clientWidth) / 2));
-  viewport.scrollTo({ left, behavior: smooth ? "smooth" : "auto" });
+  viewport.scrollTo({ left, behavior });
 }
 
 function updateDynamic() {
@@ -1657,6 +1919,26 @@ function updateDynamic() {
         : agent.status === "running" ? nowLine(activity?.[agent.key]) : "";
       doing.textContent = line;
       doing.title = line;
+    }
+  }
+
+  // Compact panels scroll the active node out of view, so the sticky footer
+  // carries whatever is happening right now.
+  const nowElement = $("progress-now");
+  if (nowElement) {
+    const running = agents.filter((agent) => agent.status === "running");
+    const lead = running.find((agent) => activity?.[agent.key]) ?? running[0];
+    const line = lead ? nowLine(activity?.[lead.key]) : "";
+    const key = lead ? `${lead.key}§${line}§${running.length}` : "";
+    if (key !== nowElement.dataset.key) {
+      nowElement.dataset.key = key;
+      nowElement.hidden = !lead;
+      nowElement.innerHTML = lead
+        ? `<span class="dot running" aria-hidden="true"></span><b>${esc(lead.label)}</b>`
+          + `<span class="progress-now-text mono">${esc(line)}</span>`
+          + (running.length > 1 ? `<span class="progress-now-more">+${running.length - 1}</span>` : "")
+        : "";
+      nowElement.title = lead ? `${lead.label}${line ? ` — ${line}` : ""}` : "";
     }
   }
 
@@ -1737,6 +2019,7 @@ document.addEventListener("click", (event) => {
     structureKey = "";
     renderRunsList();
     refreshDetail();
+    if (navOverlay.matches) setNav(false);
     return;
   }
   if (event.target.closest("[data-flow-focus]")) {
@@ -1875,8 +2158,20 @@ function closeDrawer() {
 
 $("drawer-close").onclick = closeDrawer;
 $("backdrop").onclick = closeDrawer;
-document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeDrawer(); });
+$("nav-toggle").onclick = () => setNav(!navOpen());
+$("nav-backdrop").onclick = () => setNav(false);
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (drawer) {
+    closeDrawer();
+    return;
+  }
+  if (navOverlay.matches && navOpen()) setNav(false);
+});
+navOverlay.addEventListener("change", syncNavToWidth);
 window.addEventListener("resize", () => requestAnimationFrame(drawConnectors));
+// The sidebar can change the stage width without a window resize.
+new ResizeObserver(() => requestAnimationFrame(drawConnectors)).observe($("main"));
 
 $("status-filters").addEventListener("click", (event) => {
   const chip = event.target.closest("[data-status]");
@@ -1897,15 +2192,23 @@ $("launched-filter").addEventListener("change", (event) => {
 $("filters-reset").addEventListener("click", resetFilters);
 
 buildFilterBar();
+syncNavToWidth();
 refreshRuns();
 refreshActive();
-setInterval(refreshRuns, 3000);
-setInterval(refreshActive, 2000);
-setInterval(() => {
+
+// A panel inside a desktop app spends most of its life hidden behind another
+// tab or view. Polling then is pure waste, so every timer parks until it is
+// on screen again and catches up in one burst.
+const onScreen = () => document.visibilityState !== "hidden";
+const poll = (task, ms) => setInterval(() => { if (onScreen()) task(); }, ms);
+
+poll(refreshRuns, 3000);
+poll(refreshActive, 2000);
+poll(() => {
   if (selectedRunId && (detail?.run?.status === "running" || !detail)) refreshDetail();
 }, 1500);
-setInterval(updateDynamic, 1000);
-setInterval(() => {
+poll(updateDynamic, 1000);
+poll(() => {
   if (!drawer?.live) return;
   if (!["queued", "running"].includes(agentsIndex.get(drawer.agentKey)?.status)) {
     drawer.live = false;
@@ -1914,6 +2217,13 @@ setInterval(() => {
   }
   renderDrawerBody();
 }, 2000);
+
+document.addEventListener("visibilitychange", () => {
+  if (!onScreen()) return;
+  refreshRuns();
+  refreshActive();
+  refreshDetail();
+});
 </script>
 </body>
 </html>
