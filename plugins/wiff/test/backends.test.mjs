@@ -7,6 +7,7 @@ import { ClaudeBackend } from "../src/backends/claude.mjs";
 import {
   buildCodexAppServerArgs,
   CodexBackend,
+  codexModelSelection,
   parseCodexMcpServerNames,
   parseGoalDirective,
 } from "../src/backends/codex.mjs";
@@ -66,6 +67,7 @@ const readline = require("node:readline");
 let goal = null;
 let turnCount = 0;
 const inputs = [];
+let lastTurnParams = null;
 const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
 readline.createInterface({ input: process.stdin }).on("line", (line) => {
   const message = JSON.parse(line);
@@ -75,6 +77,10 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
     return;
   }
   if (message.method === "thread/start") {
+    require("node:fs").writeFileSync(
+      require("node:path").join(require("node:path").dirname(process.argv[1]), "thread.json"),
+      JSON.stringify(message.params),
+    );
     send({ id: message.id, result: { thread: { id: "thread-goal" } } });
     return;
   }
@@ -100,6 +106,11 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
   if (message.method === "turn/start") {
     turnCount += 1;
     inputs.push(message.params.input[0].text);
+    lastTurnParams = message.params;
+    require("node:fs").writeFileSync(
+      require("node:path").join(require("node:path").dirname(process.argv[1]), "turn.json"),
+      JSON.stringify(lastTurnParams),
+    );
     const turnId = "turn-" + turnCount;
     send({ id: message.id, result: { turn: { id: turnId } } });
     setImmediate(() => {
@@ -200,6 +211,29 @@ test("inferProvider maps model prefixes", () => {
   assert.equal(inferProvider(undefined), null);
 });
 
+test("codexModelSelection maps effort and fast suffixes", () => {
+  assert.deepEqual(codexModelSelection("gpt-5.6-sol", "medium"), {
+    model: "gpt-5.6-sol",
+    effort: "medium",
+    serviceTier: undefined,
+  });
+  assert.deepEqual(codexModelSelection("gpt-5.6-sol-fast", "low"), {
+    model: "gpt-5.6-sol",
+    effort: "low",
+    serviceTier: "priority",
+  });
+  assert.deepEqual(codexModelSelection("gpt-5.6-sol-xhigh-fast", "low"), {
+    model: "gpt-5.6-sol",
+    effort: "xhigh",
+    serviceTier: "priority",
+  });
+  assert.deepEqual(codexModelSelection("o3-mini", "high"), {
+    model: "o3-mini",
+    effort: "high",
+    serviceTier: undefined,
+  });
+});
+
 test("parses /goal agent directives and rejects an empty objective", () => {
   assert.equal(parseGoalDirective("/goal make the tests pass"), "make the tests pass");
   assert.equal(parseGoalDirective("  /goal\n  make the tests pass\n"), "make the tests pass");
@@ -293,6 +327,22 @@ test("Codex /goal stages fail when the goal becomes blocked", async () => {
       }),
       /stopped before completion with status "blocked"/,
     );
+  });
+});
+
+test("Codex backend sends Fast mode as the priority service tier", async () => {
+  await withCodexStub(async ({ backend, cwd }) => {
+    await backend.runAgent({
+      prompt: "review",
+      options: codexOptions(cwd, { model: "gpt-5.6-sol-xhigh-fast", effort: "low" }),
+      signal: new AbortController().signal,
+    });
+    const thread = JSON.parse(await readFile(path.join(cwd, "thread.json"), "utf8"));
+    const turn = JSON.parse(await readFile(path.join(cwd, "turn.json"), "utf8"));
+    assert.equal(thread.model, "gpt-5.6-sol");
+    assert.equal(turn.model, "gpt-5.6-sol");
+    assert.equal(turn.effort, "xhigh");
+    assert.equal(turn.serviceTier, "priority");
   });
 });
 

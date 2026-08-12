@@ -206,6 +206,6 @@ export class BackendRouter {
 }
 
 export { ClaudeBackend } from "./claude.mjs";
-export { CodexBackend, AppServerClient } from "./codex.mjs";
+export { CodexBackend, AppServerClient, codexModelSelection } from "./codex.mjs";
 export { CursorBackend, cursorModelSelection } from "./cursor.mjs";
 export { KimiBackend } from "./kimi.mjs";

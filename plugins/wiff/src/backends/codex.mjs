@@ -31,6 +31,23 @@ export function parseGoalDirective(prompt) {
   return objective;
 }
 
+// Catalog ids look like gpt-5.6-sol. Wiff also accepts effort/fast suffixes
+// such as gpt-5.6-sol-xhigh-fast. Fast mode is Codex's priority service tier.
+const CODEX_MODEL =
+  /^(.+?)(?:-(low|medium|high|xhigh|max|ultra))?(?:-(fast))?$/i;
+const CODEX_FAST_SERVICE_TIER = "priority";
+
+export function codexModelSelection(model, effort) {
+  const trimmed = String(model ?? "").trim();
+  const match = trimmed.match(CODEX_MODEL);
+  if (!match) return { model: trimmed, effort };
+  return {
+    model: match[1],
+    effort: match[2] ?? effort,
+    serviceTier: match[3] ? CODEX_FAST_SERVICE_TIER : undefined,
+  };
+}
+
 function initialGoalPrompt(prompt, originalPrompt, objective) {
   if (prompt === originalPrompt) return objective;
   if (prompt.endsWith(originalPrompt)) {
@@ -306,8 +323,9 @@ export class CodexBackend {
     await this.start();
     if (signal?.aborted) throw signal.reason ?? new Error("Agent aborted.");
 
+    const selection = codexModelSelection(options.model, options.effort);
     const threadParams = {
-      model: options.model,
+      model: selection.model,
       cwd: options.cwd,
       approvalPolicy: "never",
       sandbox: options.sandbox,
@@ -366,9 +384,10 @@ export class CodexBackend {
         const turnParams = {
           threadId,
           input: [{ type: "text", text: turnPrompt }],
-          model: options.model,
-          effort: options.effort,
+          model: selection.model,
+          effort: selection.effort,
         };
+        if (selection.serviceTier !== undefined) turnParams.serviceTier = selection.serviceTier;
         if (options.schema !== undefined) turnParams.outputSchema = options.schema;
         const turnResponse = await this.#request("turn/start", turnParams);
         context.turnId = turnResponse?.turn?.id;

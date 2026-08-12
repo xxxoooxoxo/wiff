@@ -40,7 +40,7 @@ npx -p @xxxoooxoxo/wiff wiff-viewer       # live web viewer on http://127.0.0.1:
 Goal stages are marked directly in the workflow graph as queued, active, met, failed, or replayed.
 
 Requires Node >= 22, git for `isolation: "worktree"`, and the runtime of whichever backend
-your agents use: Codex CLI >= 0.144.6 for `gpt-*`/`o*` models (the default), the `claude` CLI for
+your agents use: Codex CLI >= 0.144.6 for `gpt-*`/`o*` models (the default; add a `-fast` suffix such as `gpt-5.6-sol-fast` for Codex Fast mode), the `claude` CLI for
 current `claude-fable-5`/`claude-opus-5`/`claude-sonnet-5`/`claude-haiku-4-5` models and the
 moving `fable`/`opus`/`sonnet`/`haiku` aliases, or `CURSOR_API_KEY` plus the bundled
 `@cursor/sdk` for `composer-*` and `grok-*` models, or the `kimi` CLI for `kimi-code/*` models. Set
