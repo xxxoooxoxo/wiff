@@ -43,7 +43,7 @@ Requires Node >= 22, git for `isolation: "worktree"`, and the runtime of whichev
 your agents use: Codex CLI >= 0.144.6 for `gpt-*`/`o*` models (the default), the `claude` CLI for
 current `claude-fable-5`/`claude-opus-5`/`claude-sonnet-5`/`claude-haiku-4-5` models and the
 moving `fable`/`opus`/`sonnet`/`haiku` aliases, or `CURSOR_API_KEY` plus the bundled
-`@cursor/sdk` for `composer-*` models, or the `kimi` CLI for `kimi-code/*` models. Set
+`@cursor/sdk` for `composer-*` and `grok-*` models, or the `kimi` CLI for `kimi-code/*` models. Set
 `WIFF_BACKEND` to route unrecognized models to a specific backend, and `WIFF_DEFAULT_MODEL`
 to change the default model. Agent calls default to medium reasoning effort and a 10-minute
 execution timeout; time waiting for a concurrency slot is tracked separately. Wiff-launched

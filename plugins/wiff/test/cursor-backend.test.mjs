@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CursorBackend } from "../src/backends/cursor.mjs";
+import { CursorBackend, cursorModelSelection } from "../src/backends/cursor.mjs";
 import { inferProvider } from "../src/backends/index.mjs";
 
 // In-memory stand-in for @cursor/sdk's Agent/Run surface.
@@ -103,6 +103,28 @@ function options(overrides = {}) {
 test("inferProvider routes composer models to cursor", () => {
   assert.equal(inferProvider("composer-2.5"), "cursor");
   assert.equal(inferProvider("cursor-small"), "cursor");
+  assert.equal(inferProvider("grok-4.6"), "cursor");
+  assert.equal(inferProvider("cursor-grok-4.6-xhigh-fast"), "cursor");
+});
+
+test("cursorModelSelection maps grok catalog ids and Cursor slugs", () => {
+  assert.deepEqual(cursorModelSelection("grok-4.6"), { id: "grok-4.6" });
+  assert.deepEqual(cursorModelSelection("composer-2.5", "high"), { id: "composer-2.5" });
+  assert.deepEqual(cursorModelSelection("grok-4.6", "xhigh"), {
+    id: "grok-4.6",
+    params: [{ id: "effort", value: "xhigh" }],
+  });
+  assert.deepEqual(cursorModelSelection("cursor-grok-4.6", "medium"), {
+    id: "grok-4.6",
+    params: [{ id: "effort", value: "medium" }],
+  });
+  assert.deepEqual(cursorModelSelection("cursor-grok-4.6-xhigh-fast", "low"), {
+    id: "grok-4.6",
+    params: [
+      { id: "effort", value: "xhigh" },
+      { id: "fast", value: "true" },
+    ],
+  });
 });
 
 test("cursor backend runs an agent through the SDK and normalizes the result", async () => {
@@ -143,6 +165,31 @@ test("cursor backend runs an agent through the SDK and normalizes the result", a
     .map((event) => event.params.item.type);
   assert.deepEqual(items, ["reasoning", "commandExecution", "fileChange", "agentMessage"]);
   assert.equal(state.disposed, 1);
+});
+
+test("cursor backend sends grok catalog ids and effort params to the SDK", async () => {
+  const { module, state } = makeFakeSdk();
+  const backend = new CursorBackend({ loadSdk: async () => module });
+  await backend.runAgent({
+    prompt: "review",
+    options: options({ model: "grok-4.6", effort: "xhigh" }),
+  });
+  assert.deepEqual(state.creates[0].model, {
+    id: "grok-4.6",
+    params: [{ id: "effort", value: "xhigh" }],
+  });
+
+  await backend.runAgent({
+    prompt: "review",
+    options: options({ model: "cursor-grok-4.6-xhigh-fast", effort: "low" }),
+  });
+  assert.deepEqual(state.creates[1].model, {
+    id: "grok-4.6",
+    params: [
+      { id: "effort", value: "xhigh" },
+      { id: "fast", value: "true" },
+    ],
+  });
 });
 
 test("cursor backend captures schema output via the structured_output custom tool", async () => {

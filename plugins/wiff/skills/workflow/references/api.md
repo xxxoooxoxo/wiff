@@ -107,7 +107,7 @@ Options:
 - `key`: stable resume/cache key. Strongly recommended. Execution-only controls such as
   `timeoutMs` do not invalidate a completed result.
 - `label`: human-readable activity label.
-- `model`: model id. Defaults to `gpt-5.6-sol` (override with `WIFF_DEFAULT_MODEL`). The model prefix picks the backend: `gpt-*`/`o*`/`codex*` run on Codex, `claude-*`/`opus`/`sonnet`/`haiku`/`fable` run on Claude Code, `composer-*` runs on Cursor, and `kimi-code/*` runs on Kimi.
+- `model`: model id. Defaults to `gpt-5.6-sol` (override with `WIFF_DEFAULT_MODEL`). The model prefix picks the backend: `gpt-*`/`o*`/`codex*` run on Codex, `claude-*`/`opus`/`sonnet`/`haiku`/`fable` run on Claude Code, `composer-*`/`cursor-*`/`grok-*` run on Cursor, and `kimi-code/*` runs on Kimi. Cursor Grok ids are `grok-4.6` (and `cursor-grok-4.6` / `cursor-grok-4.6-xhigh-fast` slugs, which Wiff normalizes to the catalog id).
   Current explicit Claude ids include `claude-fable-5`, `claude-opus-5`,
   `claude-sonnet-5`, and `claude-haiku-4-5`; the short family names remain moving aliases for
   the latest model available through the installed Claude CLI.
@@ -188,7 +188,8 @@ Agents run on a pluggable backend selected per call: explicit `provider` option,
   is exposed as an in-process `structured_output` custom tool the agent must call. Cursor's
   sandbox only gates command execution: `read-only` is advisory (sandbox on plus a do-not-write
   instruction), `workspace-write` requires `isolation: "worktree"` like the claude backend,
-  and `danger-full-access` disables the sandbox. `effort` is ignored.
+  and `danger-full-access` disables the sandbox. `grok-*` models (including `cursor-grok-*`
+  slugs) receive `effort` as Cursor `model.params`; Composer still ignores `effort`.
 - **kimi** — one headless `kimi -p` process per agent, using full configured model aliases such
   as `kimi-code/k3`. The CLI has no system-prompt channel or native structured output, so personas
   are prepended to the prompt, the schema-only directive is appended after the task, and schema
