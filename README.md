@@ -156,7 +156,7 @@ and the workers are pluggable** — whoever drives, each `agent()` child runs on
 from its model name: `gpt-*`/`o*` models run as native Codex threads via a local
 `codex app-server`; current `claude-fable-5`, `claude-opus-5`, `claude-sonnet-5`, and
 `claude-haiku-4-5` models—or the moving `fable`/`opus`/`sonnet`/`haiku` aliases—run as headless `claude`
-agents, `composer-*` models run through the official Cursor SDK (`@cursor/sdk`) in-process, and
+agents, `composer-*` and `grok-*` models (including `cursor-grok-*` slugs) run through the official Cursor SDK (`@cursor/sdk`) in-process, and
 `kimi-code/*` models run as headless `kimi` processes. A workflow can mix them freely
 (`provider: "codex" | "claude" | "cursor" | "kimi"` overrides the inference, `WIFF_BACKEND`
 sets the fallback for unrecognized models). On the Claude, Cursor, and Kimi backends,

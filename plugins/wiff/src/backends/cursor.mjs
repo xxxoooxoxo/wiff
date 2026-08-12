@@ -2,6 +2,22 @@ import { serializeError } from "../util.mjs";
 
 const STRUCTURED_OUTPUT_TOOL = "structured_output";
 
+// Cursor's catalog uses ids like grok-4.6. Cursor agent slugs sometimes look
+// like cursor-grok-4.6-xhigh-fast; peel those back to a catalog id plus params.
+const GROK_MODEL =
+  /^(?:cursor-)?(grok-[^\s]+?)(?:-(low|medium|high|xhigh|max))?(?:-(fast))?$/i;
+
+export function cursorModelSelection(model, effort) {
+  const trimmed = String(model ?? "").trim();
+  const grok = trimmed.match(GROK_MODEL);
+  if (!grok) return { id: trimmed };
+  const params = [];
+  const resolvedEffort = grok[2] ?? effort;
+  if (resolvedEffort) params.push({ id: "effort", value: resolvedEffort });
+  if (grok[3]) params.push({ id: "fast", value: "true" });
+  return params.length > 0 ? { id: grok[1], params } : { id: grok[1] };
+}
+
 // Translate one Cursor SDK message into the Codex app-server item shapes the
 // journal digests and viewer already understand.
 function itemsForSdkMessage(message) {
@@ -56,6 +72,9 @@ function normalizeUsage(usage) {
 //                 enabled, and `workspace-write` requires isolation:
 //                 "worktree" (same policy as the claude backend);
 //                 `danger-full-access` disables the sandbox.
+//   effort        Mapped onto Cursor model.params for grok-* (and
+//                 cursor-grok-* slugs). Composer and other catalog ids are
+//                 passed through as `{ id }` only.
 export class CursorBackend {
   #loadSdk;
   #sdkPromise;
@@ -138,7 +157,7 @@ export class CursorBackend {
     }
 
     const agent = await Agent.create({
-      model: { id: options.model },
+      model: cursorModelSelection(options.model, options.effort),
       name: options.label,
       local: localOptions,
     });

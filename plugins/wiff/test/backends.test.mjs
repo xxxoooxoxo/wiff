@@ -7,6 +7,7 @@ import { ClaudeBackend } from "../src/backends/claude.mjs";
 import {
   buildCodexAppServerArgs,
   CodexBackend,
+  codexModelSelection,
   parseCodexMcpServerNames,
   parseGoalDirective,
 } from "../src/backends/codex.mjs";
@@ -66,6 +67,7 @@ const readline = require("node:readline");
 let goal = null;
 let turnCount = 0;
 const inputs = [];
+let lastTurnParams = null;
 const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
 readline.createInterface({ input: process.stdin }).on("line", (line) => {
   const message = JSON.parse(line);
@@ -75,6 +77,10 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
     return;
   }
   if (message.method === "thread/start") {
+    require("node:fs").writeFileSync(
+      require("node:path").join(require("node:path").dirname(process.argv[1]), "thread.json"),
+      JSON.stringify(message.params),
+    );
     send({ id: message.id, result: { thread: { id: "thread-goal" } } });
     return;
   }
@@ -100,6 +106,11 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
   if (message.method === "turn/start") {
     turnCount += 1;
     inputs.push(message.params.input[0].text);
+    lastTurnParams = message.params;
+    require("node:fs").writeFileSync(
+      require("node:path").join(require("node:path").dirname(process.argv[1]), "turn.json"),
+      JSON.stringify(lastTurnParams),
+    );
     const turnId = "turn-" + turnCount;
     send({ id: message.id, result: { turn: { id: turnId } } });
     setImmediate(() => {
@@ -193,9 +204,34 @@ test("inferProvider maps model prefixes", () => {
   assert.equal(inferProvider("fable"), "claude");
   assert.equal(inferProvider("kimi-code/k3"), "kimi");
   assert.equal(inferProvider("KIMI-CODE/kimi-for-coding"), "kimi");
+  assert.equal(inferProvider("grok-4.6"), "cursor");
+  assert.equal(inferProvider("cursor-grok-4.6"), "cursor");
   assert.equal(inferProvider("gemini-2.5-pro"), "gemini");
   assert.equal(inferProvider("mystery-model"), null);
   assert.equal(inferProvider(undefined), null);
+});
+
+test("codexModelSelection maps effort and fast suffixes", () => {
+  assert.deepEqual(codexModelSelection("gpt-5.6-sol", "medium"), {
+    model: "gpt-5.6-sol",
+    effort: "medium",
+    serviceTier: undefined,
+  });
+  assert.deepEqual(codexModelSelection("gpt-5.6-sol-fast", "low"), {
+    model: "gpt-5.6-sol",
+    effort: "low",
+    serviceTier: "priority",
+  });
+  assert.deepEqual(codexModelSelection("gpt-5.6-sol-xhigh-fast", "low"), {
+    model: "gpt-5.6-sol",
+    effort: "xhigh",
+    serviceTier: "priority",
+  });
+  assert.deepEqual(codexModelSelection("o3-mini", "high"), {
+    model: "o3-mini",
+    effort: "high",
+    serviceTier: undefined,
+  });
 });
 
 test("parses /goal agent directives and rejects an empty objective", () => {
@@ -294,6 +330,22 @@ test("Codex /goal stages fail when the goal becomes blocked", async () => {
   });
 });
 
+test("Codex backend sends Fast mode as the priority service tier", async () => {
+  await withCodexStub(async ({ backend, cwd }) => {
+    await backend.runAgent({
+      prompt: "review",
+      options: codexOptions(cwd, { model: "gpt-5.6-sol-xhigh-fast", effort: "low" }),
+      signal: new AbortController().signal,
+    });
+    const thread = JSON.parse(await readFile(path.join(cwd, "thread.json"), "utf8"));
+    const turn = JSON.parse(await readFile(path.join(cwd, "turn.json"), "utf8"));
+    assert.equal(thread.model, "gpt-5.6-sol");
+    assert.equal(turn.model, "gpt-5.6-sol");
+    assert.equal(turn.effort, "xhigh");
+    assert.equal(turn.serviceTier, "priority");
+  });
+});
+
 test("router picks backends by provider, model prefix, then default", async () => {
   const created = [];
   const fake = (name) => () => {
@@ -314,18 +366,19 @@ test("router picks backends by provider, model prefix, then default", async () =
   };
   const router = new BackendRouter({
     defaultProvider: "codex",
-    factories: { codex: fake("codex"), claude: fake("claude"), kimi: fake("kimi") },
+    factories: { codex: fake("codex"), claude: fake("claude"), cursor: fake("cursor"), kimi: fake("kimi") },
   });
 
   assert.equal((await router.runAgent({ options: { model: "gpt-5.6-sol" } })).result, "codex-result");
   assert.equal((await router.runAgent({ options: { model: "claude-opus-4-8" } })).result, "claude-result");
   assert.equal((await router.runAgent({ options: { model: "kimi-code/k3" } })).result, "kimi-result");
+  assert.equal((await router.runAgent({ options: { model: "grok-4.6" } })).result, "cursor-result");
   assert.equal(
     (await router.runAgent({ options: { model: "gpt-5.6-sol", provider: "claude" } })).result,
     "claude-result",
   );
   assert.equal((await router.runAgent({ options: { model: "mystery-model" } })).result, "codex-result");
-  assert.equal(created.length, 3, "backends are lazily created once per provider");
+  assert.equal(created.length, 4, "backends are lazily created once per provider");
 
   await assert.rejects(
     router.runAgent({ options: { model: "gemini-2.5-pro" } }),
