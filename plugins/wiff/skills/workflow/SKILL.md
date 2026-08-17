@@ -9,7 +9,7 @@ Use workflow code when the plan itself benefits from deterministic branching, pa
 
 ## Build and launch
 
-1. Write a self-contained JavaScript workflow. Start with literal `export const meta = { name, description, phases }`.
+1. Write a self-contained JavaScript workflow. Start with literal `export const meta = { name, description, creator, phases }`. Set `creator` to your own model name so the run is attributed to whoever authored it.
 2. Put all context each child needs in its prompt. Child agents inherit project instructions, not the parent conversation.
 3. Use stable `key` values for every reusable `agent()` call.
 4. Wiff automatically applies user preferences from `~/.wiff/config.json` and project preferences

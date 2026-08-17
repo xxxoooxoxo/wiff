@@ -8,40 +8,74 @@
 <link rel="preconnect" href="https://rsms.me/" />
 <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
 <style>
+  /* ==================================================================
+     Design tokens
+
+     One warm hue (~32deg) carries every neutral, so the "paper" feel
+     comes from the ramp itself rather than a tint layered on top. Dark
+     mode re-derives the same contrast steps instead of inverting.
+     ================================================================== */
   :root {
-    --header-h: 54px;
-    --surface: #fffefd;
-    --surface-2: #f8f6f4;
-    --surface-3: rgb(39 39 42 / 0.06);
-    --canvas: #f5f1ee;
-    --node: #ffffff;
-    --ink: #202024;
-    --ink-2: #62626b;
-    --ink-3: #787880;
-    --line: rgb(39 39 42 / 0.08);
-    --line-strong: rgb(39 39 42 / 0.15);
-    --edge: #dedbd8;
-    --hover: rgb(39 39 42 / 0.04);
-    --active: rgb(39 39 42 / 0.065);
-    --overlay: rgb(24 24 27 / 0.28);
-    --shadow-xs: 0 1px 2px rgb(24 24 27 / 0.05), 0 4px 18px rgb(24 24 27 / 0.035);
-    --shadow-card: 0 20px 60px rgb(75 60 48 / 0.08), 0 2px 8px rgb(75 60 48 / 0.035);
-    --shadow-sheet: -16px 0 48px rgb(24 24 27 / 0.12);
-    --running: #2f6bd8;
-    --good: #16a663;
-    --bad: #df5a43;
-    --warn: #bd7b15;
-    --cached: #7c7c86;
-    --pending: #b8b8bf;
-    --running-bg: #edf3ff;
-    --good-bg: #ebf8f1;
-    --bad-bg: #fff0ed;
-    --warn-bg: #fff6e6;
-    --cached-bg: #f1f1f3;
-    --vj-bg: var(--surface-2);
+    color-scheme: light;
+
+    --paper: #faf7f2;
+    --surface: #ffffff;
+    --surface-sunk: #f4f0e9;
+    --surface-mute: rgb(38 32 24 / 0.055);
+
+    --ink: #1b1814;
+    --ink-2: #5b544a;
+    --ink-3: #8c8479;
+
+    --line: rgb(38 32 24 / 0.09);
+    --line-strong: rgb(38 32 24 / 0.16);
+    --hover: rgb(38 32 24 / 0.045);
+    --active: rgb(38 32 24 / 0.075);
+    --overlay: rgb(27 24 20 / 0.32);
+
+    --brand: #b8801d;
+    --accent: #2b6cd4;
+    --good: #0f7a4d;
+    --bad: #bf432c;
+    --warn: #9c6a12;
+    --cached: #7b736a;
+    --pending: #bcb3a7;
+
+    --accent-bg: #e9f0fd;
+    --good-bg: #e5f4ec;
+    --bad-bg: #fcece8;
+    --warn-bg: #fbf1dc;
+    --cached-bg: #f0ece5;
+
+    --edge: #ded7cc;
+
+    --shadow-e1: 0 1px 2px rgb(58 44 26 / 0.06);
+    --shadow-e2: 0 1px 2px rgb(58 44 26 / 0.05), 0 10px 28px -10px rgb(58 44 26 / 0.14);
+    --shadow-e3: 0 2px 8px rgb(58 44 26 / 0.06), 0 28px 64px -28px rgb(58 44 26 / 0.3);
+
+    /* Type scale — rem so it tracks the user's root size. */
+    --text-2xs: 0.6875rem;
+    --text-xs: 0.75rem;
+    --text-sm: 0.8125rem;
+    --text-md: 0.875rem;
+    --text-lg: 1rem;
+    --text-xl: 1.0625rem;
+
+    /* Radii — nested surfaces derive from these with calc(), never guesses. */
+    --r-card: 14px;
+    --r-panel: 12px;
+    --r-node: 10px;
+    --r-ctl: 8px;
+    --r-pill: 999px;
+
+    --header-h: 52px;
+    --sans: InterVariable, Inter, ui-sans-serif, system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
+
+    --vj-bg: var(--surface-sunk);
     --vj-bg-panel: var(--surface);
     --vj-bg-hover: var(--hover);
-    --vj-bg-selected: color-mix(in srgb, var(--running) 13%, var(--surface));
+    --vj-bg-selected: color-mix(in srgb, var(--accent) 13%, var(--surface));
     --vj-bg-selected-muted: var(--active);
     --vj-text: var(--ink);
     --vj-text-dim: var(--ink-2);
@@ -50,90 +84,92 @@
     --vj-text-selected: var(--ink);
     --vj-border: var(--line-strong);
     --vj-border-subtle: var(--line);
-    --vj-accent: var(--running);
-    --vj-accent-muted: color-mix(in srgb, var(--running) 18%, transparent);
-    --vj-string: #087a57;
-    --vj-number: #9a5a13;
-    --vj-boolean: #7253b4;
+    --vj-accent: var(--accent);
+    --vj-accent-muted: color-mix(in srgb, var(--accent) 18%, transparent);
+    --vj-string: #0a6f4d;
+    --vj-number: #94550f;
+    --vj-boolean: #6a4fae;
     --vj-error: var(--bad);
-    --vj-font: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
+    --vj-font: var(--mono);
   }
 
   [data-theme="dark"] {
-    --surface: #101011;
-    --surface-2: #151516;
-    --surface-3: rgb(255 255 255 / 0.08);
-    --canvas: #0b0b0c;
-    --node: #19191b;
-    --ink: #fafafa;
-    --ink-2: #b2b2bb;
-    --ink-3: #92929c;
-    --line: rgb(255 255 255 / 0.085);
-    --line-strong: rgb(255 255 255 / 0.16);
-    --edge: #343438;
-    --hover: rgb(255 255 255 / 0.05);
-    --active: rgb(255 255 255 / 0.08);
-    --overlay: rgb(0 0 0 / 0.58);
-    --shadow-xs: 0 1px 0 rgb(255 255 255 / 0.03);
-    --shadow-card: none;
-    --shadow-sheet: -16px 0 48px rgb(0 0 0 / 0.32);
-    --running: #74a2f2;
-    --good: #52c78a;
-    --bad: #f28c75;
-    --warn: #e8ad51;
-    --cached: #9898a1;
-    --pending: #5c5c64;
-    --running-bg: #1b2942;
-    --good-bg: #163126;
-    --bad-bg: #3b211d;
-    --warn-bg: #392c17;
-    --cached-bg: #262629;
-    --vj-bg: var(--surface-2);
-    --vj-bg-panel: var(--node);
-    --vj-bg-hover: var(--hover);
-    --vj-bg-selected: color-mix(in srgb, var(--running) 18%, var(--surface));
-    --vj-bg-selected-muted: var(--active);
-    --vj-text: var(--ink);
-    --vj-text-dim: var(--ink-2);
-    --vj-text-dimmer: var(--ink-3);
-    --vj-text-muted: var(--ink-3);
-    --vj-text-selected: var(--ink);
-    --vj-border: var(--line-strong);
-    --vj-border-subtle: var(--line);
-    --vj-accent: var(--running);
-    --vj-accent-muted: color-mix(in srgb, var(--running) 22%, transparent);
-    --vj-string: #76d6a8;
-    --vj-number: #efbd70;
-    --vj-boolean: #a9bff5;
-    --vj-error: var(--bad);
-    --vj-font: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
     color-scheme: dark;
+
+    --paper: #100e0c;
+    --surface: #191714;
+    --surface-sunk: #141210;
+    --surface-mute: rgb(247 240 230 / 0.07);
+
+    --ink: #f6f1e9;
+    --ink-2: #b4aba1;
+    --ink-3: #887f75;
+
+    --line: rgb(247 240 230 / 0.09);
+    --line-strong: rgb(247 240 230 / 0.17);
+    --hover: rgb(247 240 230 / 0.05);
+    --active: rgb(247 240 230 / 0.09);
+    --overlay: rgb(0 0 0 / 0.6);
+
+    --brand: #e2ab48;
+    --accent: #74a5f5;
+    --good: #4ec48b;
+    --bad: #f08d72;
+    --warn: #e0a94f;
+    --cached: #968d83;
+    --pending: #554d45;
+
+    --accent-bg: #182742;
+    --good-bg: #123227;
+    --bad-bg: #3a201a;
+    --warn-bg: #382a14;
+    --cached-bg: #262220;
+
+    --edge: #3a342d;
+
+    /* Elevation in dark mode comes from the ring, not from shadow. */
+    --shadow-e1: none;
+    --shadow-e2: none;
+    --shadow-e3: none;
+
+    --vj-string: #7ad9ab;
+    --vj-number: #f0c079;
+    --vj-boolean: #adc3f7;
   }
 
-  * { box-sizing: border-box; margin: 0; }
+  /* ==================================================================
+     Base
+     ================================================================== */
+  *, *::before, *::after { box-sizing: border-box; }
+  * { margin: 0; }
   html, body { height: 100%; }
   body {
     display: grid;
-    grid-template-rows: auto 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
     overflow: hidden;
-    background: var(--canvas);
+    background: var(--paper);
     color: var(--ink);
-    font-family: InterVariable, Inter, ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--sans);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-    font-size: 13px;
+    font-size: var(--text-md);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
+  /* Controls and copy run a notch larger on small screens, tightening up
+     once there is enough room for the dense desktop reading. */
+  @media (min-width: 640px) { body { font-size: var(--text-sm); } }
 
-  button { font: inherit; }
-  code, .mono, kbd {
-    font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
-    font-size: 12px;
-  }
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
+  button, select { font: inherit; color: inherit; }
+  code, .mono, kbd { font-family: var(--mono); }
+  .num { font-variant-numeric: tabular-nums; }
+  svg { display: block; }
+
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: var(--r-pill); background: var(--line-strong); background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--ink-3) 55%, transparent); background-clip: padding-box; }
   ::-webkit-scrollbar-track { background: transparent; }
+
   .sr-only {
     position: absolute;
     width: 1px;
@@ -141,83 +177,108 @@
     padding: 0;
     margin: -1px;
     overflow: hidden;
-    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
     white-space: nowrap;
     border: 0;
   }
 
+  :where(button, select, a, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Small controls keep a 48px pointer target without growing visually. */
+  .hit { display: none; }
+  @media (pointer: coarse) {
+    .hit {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      display: block;
+      width: max(100%, 48px);
+      height: max(100%, 48px);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  /* ==================================================================
+     App header
+     ================================================================== */
   .app-header {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    min-height: var(--header-h);
-    padding: 8px 16px;
-    border-bottom: 1px solid var(--line);
-    background: color-mix(in srgb, var(--surface) 94%, transparent);
-    backdrop-filter: blur(18px);
     position: relative;
     z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: var(--header-h);
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter: blur(20px);
   }
-  .app-brand { display: inline-flex; align-items: center; gap: 8px; flex: none; }
-  .app-brand-mark {
-    display: grid;
-    place-items: center;
-    width: 23px;
-    height: 23px;
-    border: 2px solid #efbd3d;
-    border-radius: 7px;
-    color: #efbd3d;
-    font-size: 12px;
-    font-weight: 700;
-    transform: rotate(30deg);
+  .app-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex: none;
+    border-radius: var(--r-ctl);
+    color: inherit;
+    text-decoration: none;
   }
-  .app-brand-mark > span { transform: rotate(-30deg); }
-  .app-header h1 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
-  .app-header .root {
+  .brand-mark { flex: none; fill: var(--brand); }
+  .app-header h1 {
+    font-size: var(--text-md);
+    font-weight: 600;
+    letter-spacing: -0.012em;
+  }
+  .app-root {
     min-width: 0;
     overflow: hidden;
     color: var(--ink-3);
+    font-size: var(--text-xs);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .app-header .spacer { flex: 1; }
-  #tick { color: var(--running); font-weight: 500; flex: none; }
-  .header-button {
-    position: relative;
+  .app-header-end { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
+  .live-tick {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    min-height: 32px;
+    color: var(--accent);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .live-tick:empty { display: none; }
+
+  .icon-button {
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 30px;
+    height: 30px;
     border: 0;
-    border-radius: 9px;
-    padding: 5px 9px;
+    border-radius: var(--r-ctl);
+    padding: 0;
     background: transparent;
     color: var(--ink-2);
     cursor: pointer;
   }
-  .header-button:hover { background: var(--hover); }
-  .header-button:focus-visible,
-  .run-main:focus-visible,
-  .run-pin:focus-visible,
-  .chip:focus-visible,
-  .side-reset:focus-visible,
-  .agent-node:focus-visible,
-  .flow-focus:focus-visible,
-  .titlebar-action:focus-visible,
-  .drawer-close:focus-visible {
-    outline: 2px solid var(--running);
-    outline-offset: 2px;
-  }
-  .nav-toggle { flex: none; margin-left: -3px; }
-  .nav-toggle svg { fill: currentColor; }
-  .nav-toggle[aria-expanded="true"] { color: var(--ink); background: var(--active); }
+  .icon-button:hover { background: var(--hover); color: var(--ink); }
+  .icon-button svg { fill: currentColor; }
+  .nav-toggle[aria-expanded="true"] { background: var(--active); color: var(--ink); }
+  /* The visible glyph is the mode the click switches *to*, not the current one. */
+  .icon-to-light { display: none; }
+  [data-theme="dark"] .icon-to-light { display: block; }
+  [data-theme="dark"] .icon-to-dark { display: none; }
 
-  .layout {
-    display: grid;
-    grid-template-columns: 286px minmax(0, 1fr);
-    min-height: 0;
-  }
+  /* ==================================================================
+     Shell
+     ================================================================== */
+  .layout { display: grid; grid-template-columns: 268px minmax(0, 1fr); min-height: 0; }
   [data-nav="closed"] .layout { grid-template-columns: minmax(0, 1fr); }
+
   .runs-sidebar {
     display: flex;
     flex-direction: column;
@@ -226,90 +287,92 @@
     overflow: hidden;
     border-right: 1px solid var(--line);
     background: var(--surface);
-    padding: 10px 8px 0;
   }
   [data-nav="closed"] .runs-sidebar { display: none; }
+
   .main-view {
     /* Container for the workflow view so it reflows on sidebar collapse, not just window resize. */
     container: stage / inline-size;
     isolation: isolate;
     min-width: 0;
     overflow-y: auto;
-    background:
-      radial-gradient(circle at 78% -20%, color-mix(in srgb, #f3c7aa 17%, transparent), transparent 42%),
-      var(--canvas);
+    background: var(--paper);
   }
 
+  /* ==================================================================
+     Sidebar — filters
+     ================================================================== */
   .side-tools {
     display: grid;
     flex: none;
-    gap: 8px;
-    padding: 4px 2px 10px;
-    margin-bottom: 8px;
+    gap: 7px;
+    padding: 9px 10px 10px;
     border-bottom: 1px solid var(--line);
   }
-  .chip-row { display: flex; flex-wrap: wrap; gap: 5px; }
+  .filter-row { display: flex; flex-wrap: wrap; gap: 4px; }
   .chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
+    min-height: 24px;
     border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 2px 8px 2px 7px;
+    border-radius: var(--r-pill);
+    padding: 2px 7px 2px 6px;
     background: transparent;
     color: var(--ink-3);
-    font-size: 11px;
-    line-height: 1.6;
+    font-size: var(--text-2xs);
+    line-height: 1.4;
     cursor: pointer;
   }
   .chip:hover { background: var(--hover); }
-  .chip .dot { width: 6px; height: 6px; }
-  .chip .dot.running { animation: none; }
-  .chip[aria-pressed="false"] .dot { opacity: 0.45; }
-  .chip-count { font-variant-numeric: tabular-nums; opacity: 0.8; }
+  .chip .dot { animation: none; }
+  .chip[aria-pressed="false"] .dot { opacity: 0.4; }
+  .chip-count { font-variant-numeric: tabular-nums; opacity: 0.75; }
   .chip[aria-pressed="true"] { border-color: transparent; }
-  .chip[aria-pressed="true"][data-status="running"] { color: var(--running); background: var(--running-bg); }
+  .chip[aria-pressed="true"][data-status="running"] { color: var(--accent); background: var(--accent-bg); }
   .chip[aria-pressed="true"][data-status="completed"] { color: var(--good); background: var(--good-bg); }
   .chip[aria-pressed="true"][data-status="failed"] { color: var(--bad); background: var(--bad-bg); }
   .chip[aria-pressed="true"][data-status="cancelled"],
   .chip[aria-pressed="true"][data-status="interrupted"] { color: var(--warn); background: var(--warn-bg); }
-  .side-tools-row { display: flex; align-items: center; gap: 8px; }
-  .select-wrap { display: inline-grid; grid-template-columns: 1fr 24px; align-items: center; }
+
+  .side-tools-row { display: flex; align-items: center; gap: 6px; }
+  .select-wrap { display: inline-grid; grid-template-columns: 1fr 22px; align-items: center; }
   .select-wrap select {
     grid-column: 1 / -1;
     grid-row: 1;
     appearance: none;
+    min-height: 26px;
     border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 3px 22px 3px 8px;
+    border-radius: var(--r-ctl);
+    padding: 2px 22px 2px 8px;
     background: var(--surface);
     color: var(--ink-2);
-    font: inherit;
-    font-size: 11px;
-    line-height: 1.6;
+    font-size: var(--text-2xs);
     cursor: pointer;
   }
   .select-wrap select:hover { background: var(--hover); }
-  .select-wrap select:focus-visible { outline: 2px solid var(--running); outline-offset: 0; }
-  .select-wrap svg { grid-column: 2; grid-row: 1; place-self: center; pointer-events: none; color: var(--ink-3); }
+  .select-wrap svg { grid-column: 2; grid-row: 1; place-self: center; fill: var(--ink-3); pointer-events: none; }
   .side-count {
     margin-left: auto;
     color: var(--ink-3);
-    font-size: 10px;
+    font-size: var(--text-2xs);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-  .side-reset {
+  .text-button {
     border: 0;
-    border-radius: 7px;
+    border-radius: var(--r-ctl);
     padding: 3px 7px;
     background: transparent;
-    color: var(--running);
-    font-size: 11px;
+    color: var(--accent);
+    font-size: var(--text-2xs);
     cursor: pointer;
   }
-  .side-reset:hover { background: var(--hover); }
+  .text-button:hover { background: var(--hover); }
 
+  /* ==================================================================
+     Sidebar — run list
+     ================================================================== */
   .side-list {
     display: grid;
     flex: 1;
@@ -317,40 +380,112 @@
     gap: 1px;
     min-height: 0;
     overflow-y: auto;
-    padding-bottom: 24px;
+    padding: 6px 6px 24px;
   }
   .side-h {
-    padding: 11px 10px 5px;
+    padding: 12px 8px 4px;
     color: var(--ink-3);
-    font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
-    font-size: 10px;
+    font-family: var(--mono);
+    font-size: var(--text-2xs);
     font-weight: 500;
-    letter-spacing: .08em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
   }
-  .run-item { position: relative; border-radius: 10px; color: var(--ink); }
+  .side-list > .side-h:first-child { padding-top: 4px; }
+
+  .run-item { position: relative; border-radius: var(--r-panel); color: var(--ink); }
   .run-item:hover { background: var(--hover); }
   .run-item.selected { background: var(--active); }
   .run-main {
+    display: grid;
+    gap: 3px;
     width: 100%;
     border: 0;
-    border-radius: 10px;
-    padding: 9px 30px 9px 10px;
+    border-radius: var(--r-panel);
+    padding: 8px 28px 8px 8px;
     background: transparent;
-    color: inherit;
     cursor: pointer;
     text-align: left;
   }
+  .run-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+  }
+  .run-name {
+    min-width: 0;
+    overflow: hidden;
+    font-size: var(--text-sm);
+    font-weight: 550;
+    letter-spacing: -0.008em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .run-time {
+    flex: none;
+    color: var(--ink-3);
+    font-size: var(--text-2xs);
+    font-variant-numeric: tabular-nums;
+  }
+  .run-meta {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    padding-left: 15px;
+    overflow: hidden;
+  }
+  .run-stats {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ink-3);
+    font-size: var(--text-2xs);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .run-stats .done { color: var(--good); }
+  .run-stats .failed { color: var(--bad); }
+  .run-stats .cached { color: var(--cached); }
+  .run-live {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding-left: 15px;
+    color: var(--ink-2);
+    font-size: var(--text-2xs);
+  }
+  .run-live .dot { width: 5px; height: 5px; }
+  .run-live-label {
+    flex: none;
+    max-width: 46%;
+    overflow: hidden;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .run-live-doing {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ink-3);
+    font-family: var(--mono);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .run-pin {
     position: absolute;
-    top: 7px;
-    right: 7px;
+    top: 6px;
+    right: 6px;
     display: grid;
     place-items: center;
     width: 22px;
     height: 22px;
     border: 0;
-    border-radius: 7px;
+    border-radius: var(--r-ctl);
     padding: 0;
     background: transparent;
     color: var(--ink-3);
@@ -361,239 +496,167 @@
   .run-item:focus-within .run-pin,
   .run-pin[aria-pressed="true"] { opacity: 1; }
   .run-pin:hover { background: var(--active); color: var(--ink-2); }
-  .run-pin[aria-pressed="true"] { color: var(--warn); }
+  .run-pin[aria-pressed="true"] { color: var(--brand); }
   .run-pin svg { fill: currentColor; }
-  .run-pin .hit,
-  .nav-toggle .hit { display: none; }
   @media (pointer: coarse) {
-    .run-pin { opacity: 0.6; }
+    .run-pin { opacity: 0.55; }
     .run-pin[aria-pressed="true"] { opacity: 1; }
-    .run-pin .hit,
-    .nav-toggle .hit {
-      display: block;
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: max(100%, 44px);
-      height: max(100%, 44px);
-      transform: translate(-50%, -50%);
-    }
-  }
-  .run-item .name {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    overflow: hidden;
-    font-weight: 500;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .run-item .sub {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding-left: 15px;
-    margin-top: 3px;
-    color: var(--ink-3);
-    font-size: 11px;
-  }
-  .run-item .live {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    padding-left: 15px;
-    margin-top: 6px;
-    color: var(--ink-2);
-    font-size: 11px;
-  }
-  .run-item .live > span:nth-child(2) {
-    flex: none;
-    max-width: 44%;
-    overflow: hidden;
-    font-weight: 500;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .run-item .doing {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--ink-3);
-    font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
-    font-size: 10px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
-  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-  .dot.running { background: var(--running); animation: pulse 1.4s ease-in-out infinite; }
-  .dot.queued { border: 1px solid var(--running); background: transparent; }
+  /* ==================================================================
+     Status primitives
+     ================================================================== */
+  .dot { flex: none; width: 7px; height: 7px; border-radius: 50%; }
+  .dot.running { background: var(--accent); animation: pulse 1.5s ease-in-out infinite; }
+  .dot.queued { border: 1px solid var(--accent); background: transparent; }
   .dot.completed { background: var(--good); }
   .dot.failed { background: var(--bad); }
   .dot.cached { background: var(--cached); }
   .dot.cancelled, .dot.interrupted, .dot.stalled { background: var(--warn); }
   .dot.pending { border: 1px solid var(--pending); background: transparent; }
-  .run-item .live .dot { width: 5px; height: 5px; }
-  @keyframes pulse { 50% { opacity: .35; } }
+  @keyframes pulse { 50% { opacity: 0.3; } }
 
   .pill {
     display: inline-flex;
     align-items: center;
     gap: 4px;
     flex: none;
-    border-radius: 999px;
-    padding: 1px 8px 1px 6px;
-    font-size: 11px;
+    border-radius: var(--r-pill);
+    padding: 1px 7px 1px 5px;
+    font-size: var(--text-2xs);
     font-weight: 500;
-    line-height: 1.6;
+    line-height: 1.5;
     white-space: nowrap;
   }
-  .pill.running { color: var(--running); background: var(--running-bg); }
-  .pill.queued { color: var(--running); background: var(--running-bg); }
+  .pill .dot { width: 5px; height: 5px; }
+  .pill.running, .pill.queued { color: var(--accent); background: var(--accent-bg); }
   .pill.completed { color: var(--good); background: var(--good-bg); }
   .pill.failed { color: var(--bad); background: var(--bad-bg); }
   .pill.cancelled, .pill.interrupted, .pill.stalled { color: var(--warn); background: var(--warn-bg); }
   .pill.cached { color: var(--cached); background: var(--cached-bg); }
 
-  /* Padding lives here, not on .main-view — a container query can't style its own container. */
-  .workflow-shell { width: min(100%, 1500px); margin-inline: auto; padding: clamp(16px, 2.5vw, 34px); }
+  /* ==================================================================
+     Workflow card
+     ================================================================== */
+  .workflow-shell {
+    --shell-pad: clamp(14px, 2vw, 26px);
+    width: min(100%, 1440px);
+    margin-inline: auto;
+    padding: var(--shell-pad);
+  }
   .workflow-card {
     overflow: hidden;
-    border: 1px solid var(--line);
-    border-radius: 24px;
+    border-radius: var(--r-card);
     background: var(--surface);
-    box-shadow: var(--shadow-card);
+    box-shadow: 0 0 0 1px var(--line), var(--shadow-e2);
   }
   .workflow-titlebar {
     display: flex;
     align-items: center;
-    gap: 14px;
-    min-height: 70px;
-    padding: 14px 20px;
+    gap: 12px;
+    padding: 13px 16px;
     border-bottom: 1px solid var(--line);
   }
-  .workflow-symbol {
-    display: grid;
-    place-items: center;
-    flex: none;
-    width: 25px;
-    height: 25px;
-    border: 3px solid #efbd3d;
-    border-radius: 8px;
-    color: #efbd3d;
-    font-size: 11px;
-    font-weight: 700;
-    transform: rotate(30deg);
-  }
-  .workflow-symbol > span { transform: rotate(-30deg); }
+  .workflow-symbol { flex: none; fill: var(--brand); }
   .workflow-heading { min-width: 0; flex: 1; }
   .workflow-heading h2 {
     display: flex;
     align-items: center;
     gap: 8px;
     min-width: 0;
-    font-size: 17px;
+    font-size: var(--text-xl);
     font-weight: 600;
     letter-spacing: -0.02em;
-    text-wrap: balance;
   }
-  .workflow-heading h2 .title {
+  .workflow-title {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .workflow-heading .description {
-    max-width: 70ch;
+  .workflow-attempt { flex: none; color: var(--ink-3); font-weight: 400; font-variant-numeric: tabular-nums; }
+  .workflow-description {
+    max-width: 78ch;
     margin-top: 2px;
     overflow: hidden;
     color: var(--ink-2);
-    font-size: 12px;
+    font-size: var(--text-xs);
     text-overflow: ellipsis;
+    text-wrap: pretty;
     white-space: nowrap;
   }
-  .workflow-number { color: var(--ink-3); font-weight: 400; }
   .workflow-owner {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 7px;
     flex: none;
     color: var(--ink-2);
+    font-size: var(--text-xs);
   }
-  .creator-label { color: var(--ink-3); }
-  .creator-avatar {
+  .workflow-owner .label { color: var(--ink-3); }
+  .owner-name {
+    max-width: 18ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .owner-monogram {
+    display: grid;
+    place-items: center;
     width: 22px;
     height: 22px;
     border-radius: 50%;
-    background: linear-gradient(145deg, #ffe4a4, #ffb671 62%, #ff8f72);
-    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.5);
-  }
-  .titlebar-action {
-    display: none;
-    place-items: center;
-    flex: none;
-    width: 30px;
-    height: 30px;
-    border: 0;
-    border-radius: 9px;
-    padding: 0;
-    background: var(--surface-3);
+    outline: 1px solid var(--line-strong);
+    outline-offset: -1px;
+    background: var(--surface-mute);
     color: var(--ink-2);
-    cursor: pointer;
-    font-size: 15px;
+    font-size: var(--text-2xs);
+    font-weight: 600;
   }
-  .titlebar-action:hover { color: var(--ink); }
   .workflow-error {
-    border-bottom: 1px solid color-mix(in srgb, var(--bad) 18%, transparent);
-    padding: 9px 20px;
+    display: flex;
+    gap: 8px;
+    padding: 9px 16px;
+    border-bottom: 1px solid color-mix(in srgb, var(--bad) 20%, transparent);
     background: var(--bad-bg);
     color: var(--bad);
+    font-size: var(--text-xs);
     word-break: break-word;
   }
+  .workflow-error svg { flex: none; margin-top: 1px; fill: currentColor; }
 
+  /* ==================================================================
+     Flow graph
+     ================================================================== */
   .flow-viewport {
     position: relative;
-    min-height: 440px;
+    min-height: 240px;
     overflow: auto;
     overscroll-behavior: contain;
-    background-color: var(--surface-2);
-    background-image: radial-gradient(circle, color-mix(in srgb, var(--ink-3) 25%, transparent) 1px, transparent 1px);
-    background-position: 0 0;
-    background-size: 22px 22px;
+    background: var(--surface-sunk);
   }
   .flow-stage {
     position: relative;
     width: max(100%, var(--stage-width));
-    min-height: 440px;
-    padding: 30px 42px 70px;
+    padding: 22px 26px 34px;
   }
-  .flow-edges {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    overflow: visible;
-    pointer-events: none;
-  }
+  .flow-edges { position: absolute; inset: 0; z-index: 1; overflow: visible; pointer-events: none; }
   .flow-edge {
     fill: none;
     stroke: var(--edge);
-    stroke-width: 2;
+    stroke-width: 1.5;
     stroke-linecap: round;
   }
-  .flow-edge.completed { stroke: color-mix(in srgb, var(--good) 32%, var(--edge)); }
-  .flow-edge.failed { stroke: color-mix(in srgb, var(--bad) 42%, var(--edge)); }
-  .flow-edge.cached { stroke: color-mix(in srgb, var(--cached) 45%, var(--edge)); }
+  .flow-edge.completed { stroke: color-mix(in srgb, var(--good) 26%, var(--edge)); }
+  .flow-edge.failed { stroke: color-mix(in srgb, var(--bad) 38%, var(--edge)); }
+  .flow-edge.cached { stroke: color-mix(in srgb, var(--cached) 38%, var(--edge)); }
   .flow-edge.running {
-    stroke: color-mix(in srgb, var(--running) 62%, var(--edge));
-    stroke-dasharray: 7 7;
+    stroke: color-mix(in srgb, var(--accent) 60%, var(--edge));
+    stroke-dasharray: 6 6;
     animation: edge-flow 1.2s linear infinite;
   }
-  .flow-edge.queued {
-    stroke: color-mix(in srgb, var(--running) 34%, var(--edge));
-    stroke-dasharray: 3 8;
-  }
-  @keyframes edge-flow { to { stroke-dashoffset: -14; } }
+  .flow-edge.queued { stroke: color-mix(in srgb, var(--accent) 30%, var(--edge)); stroke-dasharray: 2 7; }
+  @keyframes edge-flow { to { stroke-dashoffset: -12; } }
   @keyframes rail-flow { to { background-position: 0 14px; } }
 
   .flow-grid {
@@ -602,24 +665,25 @@
     position: relative;
     z-index: 2;
     display: grid;
-    grid-template-columns: repeat(var(--phase-count), minmax(210px, 1fr));
+    grid-template-columns: repeat(var(--phase-count), minmax(200px, 1fr));
     align-items: start;
-    gap: 74px;
+    gap: 64px;
   }
   .phase-column { min-width: 0; }
   .phase-heading {
     display: flex;
     align-items: center;
-    gap: 8px;
-    min-height: 24px;
-    margin-bottom: 18px;
+    gap: 7px;
+    min-height: 22px;
+    margin-bottom: 14px;
     color: var(--ink-2);
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
   .phase-index {
+    flex: none;
     color: var(--ink-3);
-    font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
-    font-size: 10px;
+    font-family: var(--mono);
+    font-size: var(--text-2xs);
     font-variant-numeric: tabular-nums;
   }
   .phase-name {
@@ -629,15 +693,22 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .phase-count { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .phase-count {
+    flex: none;
+    border-radius: var(--r-pill);
+    padding: 0 6px;
+    background: var(--surface-mute);
+    color: var(--ink-3);
+    font-size: var(--text-2xs);
+    font-variant-numeric: tabular-nums;
+  }
   .phase-mode {
     flex: none;
-    border-radius: 999px;
-    padding: 1px 6px;
-    background: var(--surface-3);
     color: var(--ink-3);
-    font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
-    font-size: 9px;
+    font-family: var(--mono);
+    font-size: var(--text-2xs);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   .phase-hub {
     width: 8px;
@@ -645,139 +716,131 @@
     margin: 0 auto;
     border: 2px solid var(--pending);
     border-radius: 50%;
-    background: var(--surface-2);
+    background: var(--surface-sunk);
   }
-  .phase-nodes { display: grid; min-width: 0; gap: 22px; }
+  .phase-nodes { display: grid; min-width: 0; gap: 10px; }
   .phase-empty {
-    max-width: 260px;
+    max-width: 248px;
     border: 1px dashed var(--line-strong);
-    border-radius: 14px;
-    padding: 18px 14px;
+    border-radius: var(--r-node);
+    padding: 14px 12px;
     color: var(--ink-3);
+    font-size: var(--text-xs);
     text-align: center;
   }
 
+  /* ==================================================================
+     Agent node
+
+     Every part of an agent lives on one surface. Previously the label sat
+     in a chip while the model, tags and live line floated loose on the
+     canvas beneath it, which read as four unrelated fragments per agent.
+     ================================================================== */
   .agent-node {
-    position: relative;
+    --node-pad: 9px;
+    display: grid;
+    gap: 5px;
     width: 100%;
     min-width: 0;
-    max-width: 260px;
+    max-width: 264px;
     border: 0;
-    padding: 0;
-    background: transparent;
+    border-radius: var(--r-node);
+    padding: var(--node-pad) 10px;
+    background: var(--surface);
+    box-shadow: 0 0 0 1px var(--line), var(--shadow-e1);
     color: var(--ink);
     cursor: pointer;
     text-align: left;
   }
-  .agent-node:disabled { cursor: default; opacity: 1; }
+  .agent-node:hover { background: color-mix(in srgb, var(--surface) 97%, var(--ink)); }
+  .agent-node:disabled { cursor: default; }
+  .agent-node:disabled:hover { background: var(--surface); }
+  .agent-node.running { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, var(--line)), var(--shadow-e1); }
+  .agent-node.queued { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, var(--line)), var(--shadow-e1); }
+  .agent-node.failed { box-shadow: 0 0 0 1px color-mix(in srgb, var(--bad) 40%, var(--line)), var(--shadow-e1); }
+  .agent-node.goal.running,
+  .agent-node.goal.queued { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 46%, var(--line)), var(--shadow-e1); }
+
   .agent-node-main {
     display: flex;
     align-items: center;
-    gap: 9px;
-    width: 100%;
+    gap: 8px;
     min-width: 0;
-    min-height: 44px;
-    border-radius: 14px;
-    padding: 9px 12px;
-    background: var(--node);
-    box-shadow: var(--shadow-xs), 0 0 0 1px var(--line);
-  }
-  .agent-node:hover .agent-node-main { background: color-mix(in srgb, var(--node) 96%, var(--ink)); }
-  .agent-node:disabled:hover .agent-node-main { background: var(--node); }
-  .agent-node.running .agent-node-main { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 36%, var(--line)); }
-  .agent-node.queued .agent-node-main { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 20%, var(--line)); }
-  .agent-node.failed .agent-node-main { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--bad) 38%, var(--line)); }
-  .agent-node.goal.running .agent-node-main,
-  .agent-node.goal.queued .agent-node-main {
-    box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 52%, var(--line));
   }
   .node-status {
     display: grid;
     place-items: center;
     flex: none;
-    width: 19px;
-    height: 19px;
-    border: 2px solid var(--pending);
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid var(--pending);
     border-radius: 50%;
     color: var(--pending);
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     line-height: 1;
   }
-  .node-status.completed { border-color: var(--good); background: var(--good); color: #fff; }
-  .node-status.failed { border-color: var(--bad); background: var(--bad); color: #fff; }
+  .node-status.completed { border-color: var(--good); background: var(--good); color: var(--surface); }
+  .node-status.failed { border-color: var(--bad); background: var(--bad); color: var(--surface); }
   .node-status.cached { border-color: var(--cached); color: var(--cached); }
-  .node-status.running {
-    border-color: var(--running);
-    color: var(--running);
-    animation: pulse 1.4s ease-in-out infinite;
-  }
-  .node-status.queued {
-    border-color: var(--running);
-    color: var(--running);
-  }
+  .node-status.running { border-color: var(--accent); color: var(--accent); animation: pulse 1.5s ease-in-out infinite; }
+  .node-status.queued { border-color: var(--accent); color: var(--accent); }
   .node-label {
     min-width: 0;
     overflow: hidden;
-    font-size: 14px;
+    font-size: var(--text-sm);
     font-weight: 550;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.008em;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .goal-badge {
     display: inline-flex;
-    align-items: baseline;
-    flex: none;
+    align-items: center;
     gap: 3px;
-    border-radius: 6px;
-    padding: 2px 7px 2px 3px;
-    background: var(--running-bg);
-    color: var(--running);
-    font-size: 9.5px;
-    font-weight: 700;
-    letter-spacing: 0.035em;
-    line-height: 1;
-    text-transform: uppercase;
+    flex: none;
+    border-radius: calc(var(--r-node) - var(--node-pad) + 3px);
+    padding: 1px 5px 1px 4px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    line-height: 1.4;
     white-space: nowrap;
   }
   .agent-node.completed .goal-badge { background: var(--good-bg); color: var(--good); }
   .agent-node.failed .goal-badge { background: var(--bad-bg); color: var(--bad); }
   .agent-node.cached .goal-badge { background: var(--cached-bg); color: var(--cached); }
-  .node-multiplier {
-    flex: none;
-    border-radius: 8px;
-    padding: 1px 6px;
-    background: var(--surface-3);
-    color: var(--ink-2);
-    font-size: 10px;
-    font-weight: 600;
-  }
-  .agent-node-owner {
+
+  .node-meta {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
     min-width: 0;
-    padding-inline: 10px 4px;
-    margin-top: 8px;
+    padding-left: 24px;
     color: var(--ink-2);
-    font-size: 11px;
+    font-size: var(--text-2xs);
   }
   .agent-orb {
     flex: none;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    box-shadow: inset -3px -3px 5px rgb(255 255 255 / 0.32);
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
   }
-  .tone-0 { background: linear-gradient(145deg, #70ead7, #28bda4); }
-  .tone-1 { background: linear-gradient(145deg, #9b8cff, #5d57db); }
-  .tone-2 { background: linear-gradient(145deg, #ff78b4, #e52f82); }
-  .tone-3 { background: linear-gradient(145deg, #7cc7ff, #3f70df); }
-  .tone-4 { background: linear-gradient(145deg, #ffc66d, #e68032); }
+  .tone-0 { background: #2bab95; }
+  .tone-1 { background: #6f63d8; }
+  .tone-2 { background: #d43b7c; }
+  .tone-3 { background: #3d80cf; }
+  .tone-4 { background: #cf7c2c; }
+  [data-theme="dark"] .tone-0 { background: #4fd1b8; }
+  [data-theme="dark"] .tone-1 { background: #9b8cf5; }
+  [data-theme="dark"] .tone-2 { background: #f472a6; }
+  [data-theme="dark"] .tone-3 { background: #6faaf0; }
+  [data-theme="dark"] .tone-4 { background: #f0a45c; }
   .node-owner-label {
     min-width: 0;
     overflow: hidden;
+    font-family: var(--mono);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -792,86 +855,85 @@
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
-    padding-inline: 10px 4px;
-    margin-top: 6px;
+    padding-left: 24px;
   }
   .node-tag {
     flex: none;
-    border-radius: 6px;
-    padding: 1px 6px;
-    background: var(--surface-3);
+    border-radius: calc(var(--r-node) - var(--node-pad) + 3px);
+    padding: 0 5px;
+    background: var(--surface-mute);
     color: var(--ink-3);
-    font-size: 9.5px;
+    font-size: var(--text-2xs);
+    line-height: 1.6;
     white-space: nowrap;
   }
-  .node-tag.effort { color: var(--running); background: var(--running-bg); font-weight: 600; }
-  .node-tag.worktree { color: var(--warn); background: var(--warn-bg); }
+  .node-tag.effort { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+  .node-tag.worktree { background: var(--warn-bg); color: var(--warn); }
   .node-activity {
-    display: block;
-    min-height: 18px;
-    padding-inline: 10px 4px;
-    margin-top: 7px;
+    min-width: 0;
+    padding-left: 24px;
     overflow: hidden;
     color: var(--ink-2);
-    font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
-    font-size: 10px;
+    font-family: var(--mono);
+    font-size: var(--text-2xs);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .node-activity:empty { min-height: 0; margin-top: 0; }
+  .node-activity:empty { display: none; }
   .node-error {
-    display: block;
-    max-width: 100%;
-    padding-inline: 10px 4px;
-    margin-top: 7px;
+    min-width: 0;
+    padding-left: 24px;
     overflow: hidden;
     color: var(--bad);
-    font-size: 10px;
+    font-size: var(--text-2xs);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .flow-focus {
     position: absolute;
-    left: 16px;
-    bottom: 16px;
+    left: 14px;
+    bottom: 14px;
     z-index: 4;
     display: grid;
     place-items: center;
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border: 0;
-    border-radius: 11px;
-    background: color-mix(in srgb, var(--surface) 92%, transparent);
-    box-shadow: 0 0 0 1px var(--line), var(--shadow-xs);
+    border-radius: var(--r-ctl);
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    box-shadow: 0 0 0 1px var(--line), var(--shadow-e1);
     color: var(--ink-2);
     cursor: pointer;
-    font-size: 18px;
     backdrop-filter: blur(10px);
   }
-  .flow-focus:hover { background: var(--surface); }
+  .flow-focus:hover { background: var(--surface); color: var(--ink); }
+  .flow-focus svg { fill: currentColor; }
 
+  /* ==================================================================
+     Progress footer
+     ================================================================== */
   .workflow-progress {
     display: grid;
-    grid-template-columns: auto minmax(100px, 1fr) auto;
-    grid-template-areas: "label dots summary";
+    grid-template-columns: auto minmax(80px, 1fr) auto;
+    grid-template-areas: "label track summary";
     align-items: center;
-    gap: 12px;
-    min-height: 50px;
-    padding: 10px 18px;
+    gap: 14px;
+    padding: 10px 16px;
     border-top: 1px solid var(--line);
     background: var(--surface);
   }
-  .progress-label { grid-area: label; color: var(--ink-2); }
+  .progress-label { grid-area: label; color: var(--ink-3); font-size: var(--text-xs); }
   .progress-now {
     grid-area: now;
     display: none;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
     min-width: 0;
+    font-size: var(--text-2xs);
   }
   .progress-now[hidden] { display: none; }
-  .progress-now b { flex: none; max-width: 45%; overflow: hidden; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+  .progress-now b { flex: none; max-width: 46%; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
   .progress-now-text {
     min-width: 0;
     overflow: hidden;
@@ -880,181 +942,224 @@
     white-space: nowrap;
   }
   .progress-now-more { flex: none; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-  .progress-dots {
-    grid-area: dots;
+
+  /* Per-step segments read as one bar at a glance and still keep each
+     step's own status legible on hover. */
+  .progress-track {
+    grid-area: track;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 2px;
     min-width: 0;
     overflow: hidden;
   }
-  .progress-dots .dot { width: 8px; height: 8px; }
-  .progress-more { color: var(--ink-3); font-size: 10px; }
+  .seg {
+    flex: 1 1 0;
+    min-width: 4px;
+    max-width: 22px;
+    height: 6px;
+    border-radius: 2px;
+    background: var(--surface-mute);
+  }
+  .seg.completed { background: var(--good); }
+  /* Replayed steps are "done" but shouldn't compete with real work for
+     attention, so they read as a lighter fill rather than a second colour. */
+  .seg.cached { background: color-mix(in srgb, var(--cached) 42%, transparent); }
+  .seg.failed { background: var(--bad); }
+  .seg.running { background: var(--accent); animation: pulse 1.5s ease-in-out infinite; }
+  .seg.queued { background: color-mix(in srgb, var(--accent) 34%, transparent); }
+  .seg.cancelled, .seg.interrupted, .seg.stalled { background: var(--warn); }
+  .seg.pending { background: var(--surface-mute); }
+  .progress-more { flex: none; color: var(--ink-3); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
+
   .progress-summary {
     grid-area: summary;
     display: flex;
-    align-items: center;
-    gap: 14px;
+    align-items: baseline;
+    gap: 12px;
     color: var(--ink-3);
-    font-size: 11px;
+    font-size: var(--text-2xs);
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-  .progress-summary strong {
-    color: var(--ink);
-    font-size: 15px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
+  .progress-summary strong { color: var(--ink); font-size: var(--text-md); font-weight: 600; }
+  /* Reads as a projection, not a measurement — the accent keeps it visibly
+     distinct from the elapsed time sitting next to it. */
+  .progress-eta { color: var(--accent); }
+  .progress-eta:empty { display: none; }
 
+  /* ==================================================================
+     Run context + support panels
+     ================================================================== */
   .run-context {
     display: flex;
-    gap: 8px 18px;
     flex-wrap: wrap;
-    padding: 12px 4px 0;
-    color: var(--ink-3);
-    font-size: 11px;
+    gap: 6px 20px;
+    padding: 14px 4px 0;
+    font-size: var(--text-2xs);
   }
-  .run-context b { color: var(--ink-2); font-weight: 500; }
-  .run-context .path {
+  .run-context > div { display: flex; gap: 6px; min-width: 0; }
+  .run-context dt { flex: none; color: var(--ink-3); }
+  .run-context dd {
     min-width: 0;
-    max-width: 60ch;
     overflow: hidden;
+    color: var(--ink-2);
+    font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .run-context .path { max-width: 56ch; }
 
+  /* One column by default — most runs only have the Activity panel, and a
+     fixed 2-up left it stranded in the left half with dead space beside it.
+     The second column only appears when there is a second panel to fill it. */
   .support-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-    margin-top: 18px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    margin-top: 14px;
   }
+  .support-grid:has(#kept-worktrees) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .support-panel {
     min-width: 0;
     overflow: hidden;
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    background: color-mix(in srgb, var(--surface) 93%, transparent);
+    border-radius: var(--r-panel);
+    background: var(--surface-sunk);
+    box-shadow: 0 0 0 1px var(--line);
   }
   .support-panel.wide { grid-column: 1 / -1; }
   .support-panel > h3,
   .support-panel > summary {
-    padding: 11px 14px;
+    padding: 9px 12px;
     color: var(--ink-3);
-    font-family: ui-monospace, "SF Mono", "Geist Mono", Menlo, monospace;
-    font-size: 10px;
+    font-family: var(--mono);
+    font-size: var(--text-2xs);
     font-weight: 500;
-    letter-spacing: .07em;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
   }
-  .support-panel > summary { cursor: pointer; }
-  .feed { border-top: 1px solid var(--line); }
-  .feed > div {
+  .support-panel > summary {
     display: flex;
-    gap: 11px;
-    min-width: 0;
-    padding: 7px 14px;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    list-style: none;
   }
+  .support-panel > summary::-webkit-details-marker { display: none; }
+  .support-panel > summary::before {
+    content: "";
+    width: 0;
+    height: 0;
+    border-top: 3.5px solid transparent;
+    border-bottom: 3.5px solid transparent;
+    border-left: 5px solid currentColor;
+  }
+  .support-panel[open] > summary::before {
+    border-top: 5px solid currentColor;
+    border-right: 3.5px solid transparent;
+    border-bottom: 0;
+    border-left: 3.5px solid transparent;
+  }
+  .support-panel > summary:hover { color: var(--ink-2); }
+  .feed { border-top: 1px solid var(--line); font-size: var(--text-2xs); }
+  .feed > div { display: flex; gap: 10px; min-width: 0; padding: 6px 12px; }
   .feed > div + div { border-top: 1px solid var(--line); }
   .feed .t { flex: none; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-  .feed .phase-ev { color: var(--running); font-weight: 500; }
-  .feed .value {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .worktree-list > div { display: grid; grid-template-columns: minmax(100px, auto) 1fr; }
+  .feed .phase-ev { color: var(--accent); font-weight: 500; }
+  .feed .value { min-width: 0; overflow: hidden; color: var(--ink-2); text-overflow: ellipsis; white-space: nowrap; }
+  .worktree-list > div { display: grid; grid-template-columns: minmax(90px, auto) 1fr; }
   .worktree-list .path { min-width: 0; overflow: hidden; color: var(--ink-3); text-overflow: ellipsis; white-space: nowrap; }
   pre.result {
     max-height: 320px;
     overflow: auto;
     border-top: 1px solid var(--line);
-    padding: 14px;
-    background: var(--surface-2);
+    padding: 12px;
+    font-size: var(--text-xs);
     white-space: pre-wrap;
     word-break: break-word;
   }
-  .empty { padding: 54px 24px; color: var(--ink-3); text-align: center; text-wrap: pretty; }
-  .feed .empty { border-top: 1px solid var(--line); padding: 24px; }
+  .empty {
+    padding: 44px 20px;
+    color: var(--ink-3);
+    font-size: var(--text-xs);
+    text-align: center;
+    text-wrap: pretty;
+  }
+  .feed .empty { border-top: 1px solid var(--line); padding: 20px; }
+  .empty .text-button { margin-top: 6px; }
 
+  /* ==================================================================
+     Overlays — nav sheet + transcript drawer
+     ================================================================== */
   .sheet-backdrop {
     position: fixed;
     inset: 0;
     z-index: 9;
     display: none;
     border: 0;
-    border-radius: 0;
     padding: 0;
     background: var(--overlay);
   }
   .sheet-backdrop.open { display: block; }
-  .sheet-backdrop:hover { background: var(--overlay); }
   #nav-backdrop { z-index: 7; }
+
   .drawer {
     position: fixed;
     inset: 0 0 0 auto;
     z-index: 10;
     display: none;
     flex-direction: column;
-    width: min(640px, 90vw);
-    border-left: 1px solid var(--line);
+    width: min(640px, 92vw);
+    border-left: 1px solid var(--line-strong);
     background: var(--surface);
-    box-shadow: var(--shadow-sheet);
+    box-shadow: var(--shadow-e3);
   }
   .drawer.open { display: flex; }
   .drawer-header {
     display: flex;
     align-items: center;
     gap: 10px;
-    min-height: 54px;
-    padding: 9px 14px 9px 18px;
+    min-height: var(--header-h);
+    padding: 8px 10px 8px 16px;
     border-bottom: 1px solid var(--line);
   }
   .drawer-header h1 {
     min-width: 0;
     overflow: hidden;
-    font-size: 13px;
+    font-size: var(--text-sm);
     font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .drawer-header .spacer { flex: 1; }
-  .drawer-meta { flex: none; color: var(--ink-3); font-size: 11px; white-space: nowrap; }
-  .drawer-live { color: var(--running); font-size: 11px; }
-  .drawer-close {
-    position: relative;
-    border: 0;
-    border-radius: 9px;
-    padding: 5px 9px;
-    background: transparent;
-    color: var(--ink-2);
-    cursor: pointer;
+  .drawer-meta { flex: none; color: var(--ink-3); font-size: var(--text-2xs); white-space: nowrap; }
+  .drawer-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex: none;
+    margin-left: auto;
+    color: var(--accent);
+    font-size: var(--text-2xs);
+    white-space: nowrap;
   }
-  .drawer-close:hover { background: var(--hover); }
-  .drawer .body { flex: 1; overflow-y: auto; padding: 14px 18px; }
-  .tr-event { margin-bottom: 12px; }
-  .tr-event .m { color: var(--ink-3); font-size: 10px; font-variant-numeric: tabular-nums; }
-  .tr-event pre {
-    margin-top: 3px;
-    border: 1px solid var(--line);
-    border-radius: 9px;
-    padding: 8px 10px;
-    background: var(--surface-2);
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  .tr-event .vj-tree {
-    max-height: 420px;
-    margin-top: 3px;
-    overflow: auto;
-    border: 1px solid var(--line);
-    border-radius: 9px;
-    padding: 8px 10px;
-    background: var(--surface-2);
-  }
+  .drawer-live:empty { display: none; }
+  .drawer .body { flex: 1; overflow-y: auto; padding: 14px 16px; }
 
-  /* ------------------------------------------------------------------
+  .tr-event { margin-bottom: 10px; }
+  .tr-event .m { color: var(--ink-3); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
+  .tr-event pre,
+  .tr-event .vj-tree {
+    margin-top: 4px;
+    border-radius: var(--r-ctl);
+    padding: 8px 10px;
+    background: var(--surface-sunk);
+    box-shadow: 0 0 0 1px var(--line);
+    font-size: var(--text-xs);
+  }
+  .tr-event pre { white-space: pre-wrap; word-break: break-word; }
+  .tr-event .vj-tree { max-height: 420px; overflow: auto; }
+
+  /* ==================================================================
      Embedded panel mode.
 
      Two independent axes:
@@ -1062,19 +1167,18 @@
        - .main-view width -> how the workflow itself lays out (component)
      The second is a container query so collapsing the sidebar reflows the
      graph immediately, without waiting for a window resize.
-     ------------------------------------------------------------------ */
+     ================================================================== */
 
   /* Shell: the run list becomes an overlay disclosure. A horizontal strip
      would cost ~130px of the panel's scarcest resource, its height. */
   @media (max-width: 940px) {
     .layout { grid-template-columns: minmax(0, 1fr); }
-    .main-view { background: var(--surface); }
     .runs-sidebar {
       position: fixed;
       inset: var(--header-h) auto 0 0;
       z-index: 8;
       width: min(320px, 88vw);
-      box-shadow: 8px 0 34px rgb(24 24 27 / 0.17);
+      box-shadow: var(--shadow-e3);
       transition: transform 180ms ease, visibility 180ms;
     }
     [data-nav="closed"] .runs-sidebar {
@@ -1086,25 +1190,22 @@
   }
 
   @media (max-width: 820px) {
-    .app-header { gap: 9px; padding-inline: 10px; }
-    .app-header .root { display: none; }
-    .theme-label { display: none; }
-    #tick { font-size: 11px; }
+    .app-header { gap: 8px; padding-inline: 8px; }
+    .app-root { display: none; }
     .drawer { width: 100%; border-left: 0; }
-    .drawer-header { gap: 8px; padding: 8px 10px; }
+    .drawer-header { gap: 8px; padding: 8px; }
     .drawer-meta { display: none; }
-    .drawer .body { padding: 10px 12px; }
+    .drawer .body { padding: 12px; }
   }
 
   /* Workflow view: stack phases down a rail instead of scrolling sideways.
-     Columns only earn their keep once ~3 of them (284px each) fit at once;
-     below that the sideways scroll hides more than the layout shows. */
-  @container stage (max-width: 900px) {
+     Columns only earn their keep once ~3 of them fit at once; below that
+     the sideways scroll hides more than the layout shows. */
+  @container stage (max-width: 860px) {
     .flow-grid { --flow-mode: stacked; grid-template-columns: minmax(0, 1fr); gap: 0; }
-    .workflow-shell { padding: 0 0 16px; }
+    .workflow-shell { padding: 0 0 14px; }
     .workflow-card {
       overflow: visible; /* required for the sticky title/progress bars */
-      border: 0;
       border-radius: 0;
       background: transparent;
       box-shadow: none;
@@ -1114,17 +1215,16 @@
       top: 0;
       z-index: 4;
       gap: 10px;
-      min-height: 0;
-      padding: 9px 10px;
-      background: color-mix(in srgb, var(--surface) 92%, transparent);
-      backdrop-filter: blur(18px);
+      padding: 8px 10px;
+      background: color-mix(in srgb, var(--surface) 90%, transparent);
+      backdrop-filter: blur(20px);
     }
     .workflow-symbol,
     .workflow-owner,
     .flow-focus { display: none; }
-    .titlebar-action { display: grid; }
-    .workflow-heading h2 { font-size: 14px; gap: 6px; }
-    .workflow-heading .description {
+    .titlebar-focus { display: grid; }
+    .workflow-heading h2 { gap: 6px; font-size: var(--text-lg); }
+    .workflow-description {
       display: -webkit-box;
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 2;
@@ -1132,121 +1232,73 @@
     }
     .workflow-error { padding-inline: 10px; }
 
-    .flow-viewport {
-      min-height: 0;
-      overflow: visible;
-      background-color: transparent;
-      background-image: none;
-    }
-    .flow-stage { width: 100%; min-height: 0; padding: 12px 10px 4px; }
+    .flow-viewport { min-height: 0; overflow: visible; background: transparent; }
+    .flow-stage { width: 100%; padding: 10px 10px 4px; }
     .flow-edges { display: none; }
 
-    .phase-column { position: relative; padding: 0 0 16px 20px; }
+    .phase-column { position: relative; padding: 0 0 14px 20px; }
     .phase-column::before {
       content: "";
       position: absolute;
-      top: 11px;
+      top: 10px;
       bottom: 0;
       left: 5px;
       width: 2px;
-      border-radius: 999px;
+      border-radius: var(--r-pill);
       background: var(--edge);
     }
-    .phase-column:last-child::before { bottom: 22px; }
+    .phase-column:last-child::before { bottom: 20px; }
     .phase-column[data-status="completed"]::before,
-    .phase-column[data-status="cached"]::before { background: color-mix(in srgb, var(--good) 34%, var(--edge)); }
-    .phase-column[data-status="failed"]::before { background: color-mix(in srgb, var(--bad) 42%, var(--edge)); }
+    .phase-column[data-status="cached"]::before { background: color-mix(in srgb, var(--good) 32%, var(--edge)); }
+    .phase-column[data-status="failed"]::before { background: color-mix(in srgb, var(--bad) 40%, var(--edge)); }
     .phase-column[data-status="running"]::before,
     .phase-column[data-status="queued"]::before {
       background: repeating-linear-gradient(
         180deg,
-        color-mix(in srgb, var(--running) 62%, var(--edge)) 0 7px,
+        color-mix(in srgb, var(--accent) 60%, var(--edge)) 0 7px,
         transparent 7px 14px
       );
       animation: rail-flow 1.2s linear infinite;
     }
     .phase-column[data-status="queued"]::before { animation: none; opacity: 0.55; }
-    .phase-heading { min-height: 20px; margin-bottom: 9px; }
-    .phase-index { font-size: 10.5px; }
-    .phase-mode { font-size: 10px; }
+    .phase-heading { min-height: 20px; margin-bottom: 8px; }
     .phase-hub {
       position: absolute;
-      top: 5px;
+      top: 4px;
       left: 0;
       width: 12px;
       height: 12px;
       margin: 0;
-      background: var(--surface);
+      background: var(--paper);
     }
     .phase-column[data-status="completed"] .phase-hub,
     .phase-column[data-status="cached"] .phase-hub { border-color: var(--good); }
     .phase-column[data-status="failed"] .phase-hub { border-color: var(--bad); }
     .phase-column[data-status="running"] .phase-hub,
-    .phase-column[data-status="queued"] .phase-hub { border-color: var(--running); }
-    .phase-nodes { gap: 7px; }
-    .phase-empty { max-width: none; padding: 11px 12px; text-align: left; }
+    .phase-column[data-status="queued"] .phase-hub { border-color: var(--accent); }
+    .phase-nodes { gap: 6px; }
+    .phase-empty { max-width: none; padding: 10px 12px; text-align: left; }
 
-    /* One contained row per agent — the label, model, tags and live line all
-       belong to the same surface instead of floating on the canvas below it. */
-    .agent-node {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      column-gap: 8px;
-      max-width: none;
-      border-radius: 12px;
-      padding: 8px 10px 9px;
-      background: var(--node);
-      box-shadow: var(--shadow-xs), 0 0 0 1px var(--line);
-    }
-    .agent-node:hover { background: color-mix(in srgb, var(--node) 96%, var(--ink)); }
-    .agent-node:disabled:hover { background: var(--node); }
-    .agent-node.running { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 36%, var(--line)); }
-    .agent-node.queued { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 20%, var(--line)); }
-    .agent-node.failed { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--bad) 38%, var(--line)); }
-    .agent-node.goal.running,
-    .agent-node.goal.queued { box-shadow: var(--shadow-xs), 0 0 0 1px color-mix(in srgb, var(--running) 52%, var(--line)); }
-    .agent-node-main,
-    .agent-node:hover .agent-node-main,
-    .agent-node.running .agent-node-main,
-    .agent-node.queued .agent-node-main,
-    .agent-node.failed .agent-node-main,
-    .agent-node.goal.running .agent-node-main,
-    .agent-node.goal.queued .agent-node-main {
-      flex: 1 0 100%;
-      min-height: 0;
-      border-radius: 0;
-      padding: 0;
-      background: transparent;
-      box-shadow: none;
-    }
     /* Full width is available here, so wrap instead of ellipsis — the columnar
-       260px node had to clip "design:caps+headless+timeout" to "…headles…". */
+       264px node had to clip "design:caps+headless+timeout" to "…headles…". */
+    .agent-node { max-width: none; }
     .node-label {
       display: -webkit-box;
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 2;
-      font-size: 13px;
       white-space: normal;
     }
-    .agent-node-owner { flex: 0 1 auto; padding-inline: 0; margin-top: 5px; }
-    .node-tags { flex: 1 1 auto; padding-inline: 0; margin-top: 5px; }
-    .node-activity { flex: 1 0 100%; padding-inline: 0; margin-top: 5px; font-size: 10.5px; }
-    .node-error { flex: 1 0 100%; padding-inline: 0; margin-top: 5px; font-size: 10.5px; }
-    .node-tag,
-    .goal-badge { font-size: 10px; }
 
     .workflow-progress {
       position: sticky;
       bottom: 0;
       z-index: 4;
       grid-template-columns: minmax(0, 1fr) auto;
-      grid-template-areas: "now now" "dots summary";
-      gap: 3px 10px;
-      min-height: 0;
+      grid-template-areas: "now now" "track summary";
+      gap: 5px 10px;
       padding: 7px 10px;
-      background: color-mix(in srgb, var(--surface) 92%, transparent);
-      backdrop-filter: blur(18px);
+      background: color-mix(in srgb, var(--surface) 90%, transparent);
+      backdrop-filter: blur(20px);
     }
     .progress-label { display: none; }
     .progress-now { display: flex; }
@@ -1258,8 +1310,13 @@
     .support-panel.wide { grid-column: auto; }
   }
 
+  /* The jump-to-active control lives in the titlebar once the floating
+     button is out of the picture. */
+  .titlebar-focus { display: none; }
+
   @media (prefers-reduced-motion: reduce) {
     .dot.running,
+    .seg.running,
     .node-status.running,
     .flow-edge.running,
     .phase-column::before { animation: none; }
@@ -1270,21 +1327,28 @@
 </head>
 <body>
 <header class="app-header">
-  <button class="header-button nav-toggle" id="nav-toggle" type="button" aria-expanded="true" aria-controls="runs-sidebar">
-    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 4.25A.75.75 0 0 1 2.75 3.5h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 4.25Zm0 3.75a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 8Zm0 3.75a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z"/></svg>
+  <button class="icon-button nav-toggle" id="nav-toggle" type="button" aria-expanded="true" aria-controls="runs-sidebar">
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 4.75A.75.75 0 0 1 2.75 4h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 4.75ZM2 8a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 8Zm0 3.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z"/></svg>
     <span class="sr-only">Toggle run list</span>
     <span class="hit" aria-hidden="true"></span>
   </button>
-  <div class="app-brand"><span class="app-brand-mark" aria-hidden="true"><span>◇</span></span><h1>wiff</h1></div>
-  <span class="root mono" id="root"></span>
-  <span class="spacer"></span>
-  <span id="tick"></span>
-  <button class="header-button" id="theme" type="button" aria-label="Toggle theme"><span aria-hidden="true">◐</span><span class="theme-label">Theme</span></button>
+  <a class="app-brand" href="/" aria-label="Homepage">
+    <svg class="brand-mark" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 .8 15.2 8 8 15.2.8 8 8 .8Zm0 3.02L3.82 8 8 12.18 12.18 8 8 3.82Z"/></svg>
+    <h1>wiff</h1>
+  </a>
+  <span class="app-root mono" id="root"></span>
+  <div class="app-header-end">
+    <span class="live-tick" id="tick"></span>
+    <button class="icon-button" id="theme" type="button" aria-label="Toggle theme">
+      <svg class="icon-to-dark" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M14.2 9.6A6.5 6.5 0 1 1 6.4 1.8 6.5 6.5 0 0 0 14.2 9.6Z"/></svg>
+      <svg class="icon-to-light" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0-9.75a.75.75 0 0 1 .75.75v.5a.75.75 0 0 1-1.5 0V2a.75.75 0 0 1 .75-.75Zm0 11a.75.75 0 0 1 .75.75v.5a.75.75 0 0 1-1.5 0V13a.75.75 0 0 1 .75-.75ZM14.75 8a.75.75 0 0 1-.75.75h-.5a.75.75 0 0 1 0-1.5h.5a.75.75 0 0 1 .75.75Zm-11 0a.75.75 0 0 1-.75.75H2.5a.75.75 0 0 1 0-1.5H3a.75.75 0 0 1 .75.75Zm9.02-4.77a.75.75 0 0 1 0 1.06l-.36.36a.75.75 0 0 1-1.06-1.07l.35-.35a.75.75 0 0 1 1.07 0ZM4.65 11.35a.75.75 0 0 1 0 1.06l-.36.36a.75.75 0 0 1-1.06-1.06l.35-.36a.75.75 0 0 1 1.07 0Zm8.12 1.42a.75.75 0 0 1-1.07 0l-.35-.36a.75.75 0 1 1 1.06-1.06l.36.36a.75.75 0 0 1 0 1.06ZM4.65 4.65a.75.75 0 0 1-1.07 0l-.35-.36a.75.75 0 0 1 1.06-1.06l.36.35a.75.75 0 0 1 0 1.07Z"/></svg>
+    </button>
+  </div>
 </header>
 <div class="layout">
   <aside class="runs-sidebar" id="runs-sidebar" aria-label="Workflow runs">
     <div class="side-tools">
-      <div class="chip-row" id="status-filters" role="group" aria-label="Filter runs by status"></div>
+      <div class="filter-row" id="status-filters" role="group" aria-label="Filter runs by status"></div>
       <div class="side-tools-row">
         <span class="select-wrap">
           <select id="launched-filter" name="launched" aria-label="Filter by last launched">
@@ -1293,9 +1357,9 @@
             <option value="7d">Last 7 days</option>
             <option value="30d">Last 30 days</option>
           </select>
-          <svg viewBox="0 0 8 5" width="8" height="5" fill="none" aria-hidden="true"><path d="M.5.5 4 4 7.5.5" stroke="currentColor"/></svg>
+          <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"/></svg>
         </span>
-        <button class="side-reset" id="filters-reset" type="button" hidden>Reset</button>
+        <button class="text-button" id="filters-reset" type="button" hidden>Reset</button>
         <span class="side-count" id="side-count"></span>
       </div>
     </div>
@@ -1309,9 +1373,11 @@
   <header class="drawer-header">
     <h1 id="drawer-title" class="mono"></h1>
     <span class="drawer-meta mono" id="drawer-meta"></span>
-    <span class="spacer"></span>
     <span class="drawer-live" id="drawer-live"></span>
-    <button class="drawer-close" id="drawer-close" type="button" aria-label="Close transcript">✕ close</button>
+    <button class="icon-button" id="drawer-close" type="button" aria-label="Close transcript">
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2.22 2.22a.75.75 0 0 1 1.06 0L8 6.94l4.72-4.72a.75.75 0 1 1 1.06 1.06L9.06 8l4.72 4.72a.75.75 0 1 1-1.06 1.06L8 9.06l-4.72 4.72a.75.75 0 0 1-1.06-1.06L6.94 8 2.22 3.28a.75.75 0 0 1 0-1.06Z"/></svg>
+      <span class="hit" aria-hidden="true"></span>
+    </button>
   </header>
   <div class="body" id="drawer-body"></div>
 </div>
@@ -1395,11 +1461,12 @@ const fmtDur = (ms) => {
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
   return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
 };
-const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString() : "");
+const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "");
+const fmtClock = (iso) => (iso ? new Date(iso).toLocaleTimeString() : "");
 const fmtTokens = (number) => new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(number);
-const STATUS_ICON = { queued: "…", running: "•", completed: "✓", failed: "×", cached: "↻", cancelled: "–", interrupted: "Ⅱ", stalled: "!", pending: "" };
+const STATUS_ICON = { queued: "", running: "", completed: "✓", failed: "✕", cached: "↻", cancelled: "–", interrupted: "Ⅱ", stalled: "!", pending: "" };
 const KIND_ICON = { exec: "›", edit: "✎", thinking: "…", message: "·", search: "⌕", tool: "⌘" };
-const pill = (status) => `<span class="pill ${esc(status)}">${STATUS_ICON[status] ?? ""} ${esc(status)}</span>`;
+const pill = (status) => `<span class="pill ${esc(status)}"><span class="dot ${esc(status)}" aria-hidden="true"></span>${esc(status)}</span>`;
 const nowLine = (activity) => (activity ? `${KIND_ICON[activity.kind] ?? "·"} ${activity.text}` : "");
 const slugify = (value) => String(value ?? "phase").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "phase";
 const displayRunStatus = (run) =>
@@ -1600,7 +1667,7 @@ function maxConcurrency(members, now) {
 function phaseMode(members) {
   if (members.length < 2) return "";
   const maximum = maxConcurrency(members, Date.now());
-  return maximum > 1 ? `∥ ×${maximum}` : "→";
+  return maximum > 1 ? `${maximum}× parallel` : "sequential";
 }
 
 function phaseStatus(members) {
@@ -1613,10 +1680,50 @@ function phaseStatus(members) {
   return "pending";
 }
 
+// Extrapolates from this run's own throughput instead of any fixed per-agent
+// guess, so a fan-out of slow xhigh agents and a pipeline of quick ones each
+// calibrate themselves — wall-clock per finished agent already has the run's
+// real concurrency baked in.
+//
+// Cached steps are excluded from both sides of the ratio: a replay finishes in
+// ~0ms and would otherwise predict that everything left is nearly free.
+//
+// This only covers work already requested. A script that loops until a target
+// is met can always queue more, so the estimate is a floor, not a promise.
+function estimateRemaining(run, agents, now) {
+  if (displayRunStatus(run) !== "running") return null;
+  const completed = agents.filter((agent) => agent.status === "completed").length;
+  const settled = agents.filter((agent) => agent.status === "completed" || agent.status === "cached").length;
+  const total = Math.max(run.stats?.requested ?? 0, agents.length);
+  const remaining = total - settled;
+  // Under three finished agents the ratio is dominated by whichever one landed
+  // first, which reads as confident nonsense.
+  if (completed < 3 || remaining <= 0) return null;
+  const elapsed = now - +new Date(run.startedAt);
+  if (!(elapsed > 0)) return null;
+  return { remainingMs: Math.round((elapsed / completed) * remaining), completed, remaining };
+}
+
 function agentTone(agent) {
   let value = 0;
   for (const character of `${agent.options.agentType ?? ""}${agent.options.model ?? ""}${agent.key}`) value = (value * 31 + character.charCodeAt(0)) >>> 0;
   return value % 5;
+}
+
+// Only non-zero counts earn a slot — "1✓ 0× 0↻ 0 queued" spent four columns
+// saying one thing.
+function runStats(run) {
+  if (!run.stats) return "";
+  const parts = [
+    run.stats.completed ? `<span class="done">${run.stats.completed} done</span>` : "",
+    run.stats.failed ? `<span class="failed">${run.stats.failed} failed</span>` : "",
+    run.stats.cached ? `<span class="cached">${run.stats.cached} cached</span>` : "",
+    run.stats.queued ? `<span>${run.stats.queued} queued</span>` : "",
+  ].filter(Boolean);
+  if (!parts.length && run.stats.requested) {
+    parts.push(`<span>${run.stats.requested} agent${run.stats.requested === 1 ? "" : "s"}</span>`);
+  }
+  return parts.join("");
 }
 
 function runItem(run) {
@@ -1624,19 +1731,29 @@ function runItem(run) {
   const displayStatus = displayRunStatus(run);
   const pinned = pins.includes(run.runId);
   const selected = run.runId === selectedRunId;
+  const name = run.name ?? run.runId;
   return `
     <div class="run-item ${selected ? "selected" : ""}">
-      <button class="run-main" type="button" data-run="${esc(run.runId)}" ${selected ? 'aria-current="true"' : ""}>
-        <span class="name"><span class="dot ${esc(displayStatus)}"></span>${esc(run.name ?? run.runId)}</span>
-        <span class="sub">${pill(displayStatus)} · ${fmtTime(run.startedAt)}</span>
-        <span class="sub mono">${esc(run.runId.slice(0, 14))}… · ${run.stats ? `${run.stats.completed}✓ ${run.stats.failed}× ${run.stats.cached}↻ ${run.stats.queued ?? 0} queued` : ""}</span>
-        ${live.map((agent) => `<span class="live" title="${esc(agent.activity?.text ?? agent.key)}">
-          <span class="dot ${esc(agent.status)}"></span><span>${esc(agent.label)}</span><span class="doing">${esc(agent.status === "queued" ? "waiting to execute" : nowLine(agent.activity))}</span>
+      <button class="run-main" type="button" data-run="${esc(run.runId)}" ${selected ? 'aria-current="true"' : ""}
+          title="${esc(name)} — ${esc(run.runId)}">
+        <span class="run-title">
+          <span class="dot ${esc(displayStatus)}" aria-hidden="true"></span>
+          <span class="run-name">${esc(name)}</span>
+        </span>
+        <span class="run-meta">
+          ${pill(displayStatus)}
+          <span class="run-time">${fmtTime(run.startedAt)}</span>
+          <span class="run-stats">${runStats(run)}</span>
+        </span>
+        ${live.map((agent) => `<span class="run-live" title="${esc(agent.activity?.text ?? agent.key)}">
+          <span class="dot ${esc(agent.status)}" aria-hidden="true"></span>
+          <span class="run-live-label">${esc(agent.label)}</span>
+          <span class="run-live-doing">${esc(agent.status === "queued" ? "waiting to execute" : nowLine(agent.activity))}</span>
         </span>`).join("")}
       </button>
       <button class="run-pin" type="button" data-pin="${esc(run.runId)}" aria-pressed="${pinned}"
-          title="${pinned ? "Unpin" : "Pin"} run" aria-label="${pinned ? "Unpin" : "Pin"} ${esc(run.name ?? run.runId)}">
-        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h7A1.5 1.5 0 0 1 13 3.5v9.19a.75.75 0 0 1-1.172.62L8 10.51l-3.828 2.8A.75.75 0 0 1 3 12.69V3.5Z"/></svg>
+          title="${pinned ? "Unpin" : "Pin"} run" aria-label="${pinned ? "Unpin" : "Pin"} ${esc(name)}">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 2.75A.75.75 0 0 1 3.75 2h8.5a.75.75 0 0 1 .75.75v10.5a.75.75 0 0 1-1.154.632L8 11.4l-3.846 2.482A.75.75 0 0 1 3 13.25V2.75Z"/></svg>
         <span class="hit" aria-hidden="true"></span>
       </button>
     </div>`;
@@ -1654,7 +1771,7 @@ function renderRunsList() {
     running.length ? `<div class="side-h">Running</div>${running.map(runItem).join("")}` : "",
     rest.length ? `<div class="side-h">${pinned.length || running.length ? "History" : "Runs"}</div>${rest.map(runItem).join("")}` : "",
   ].join("") || (runsCache.length
-    ? `<div class="empty">No runs match these filters.<br /><button class="side-reset" type="button" data-clear-filters>Clear filters</button></div>`
+    ? `<div class="empty">No runs match these filters.<br /><button class="text-button" type="button" data-clear-filters>Clear filters</button></div>`
     : `<div class="empty">No runs yet.</div>`);
   updateFilterBar();
 }
@@ -1681,14 +1798,14 @@ function agentDisplay(agent) {
 
 function goalBadge(agent) {
   if (!agent.goal) return "";
-  const state = {
-    queued: ["∞", "goal queued"],
-    running: ["∞", "goal active"],
-    completed: ["✓", "goal met"],
-    failed: ["×", "goal failed"],
-    cached: ["↻", "goal replayed"],
-  }[agent.status] ?? ["∞", "goal"];
-  return `<span class="goal-badge"><span aria-hidden="true">${state[0]}</span>${state[1]}</span>`;
+  const label = {
+    queued: "goal queued",
+    running: "goal active",
+    completed: "goal met",
+    failed: "goal failed",
+    cached: "goal replayed",
+  }[agent.status] ?? "goal";
+  return `<span class="goal-badge">${esc(label)}</span>`;
 }
 
 function agentNode(agent) {
@@ -1709,7 +1826,7 @@ function agentNode(agent) {
       <span class="node-label">${esc(agent.label)}</span>
       ${goalBadge(agent)}
     </span>
-    <span class="agent-node-owner">
+    <span class="node-meta">
       <span class="agent-orb tone-${agentTone(agent)}" aria-hidden="true"></span>
       <span class="node-owner-label">${esc(agentDisplay(agent))}</span>
       <span class="node-duration" data-dur></span>
@@ -1735,11 +1852,11 @@ function phaseColumn(group, index) {
   </section>`;
 }
 
-function progressDots(agents, total) {
+function progressTrack(agents, total) {
   const statuses = agents.map((agent) => agent.status);
   while (statuses.length < total) statuses.push("pending");
-  const visible = statuses.slice(0, 24);
-  return `${visible.map((status, index) => `<span class="dot ${esc(status)}" title="Step ${index + 1}: ${esc(status)}"></span>`).join("")}${statuses.length > visible.length ? `<span class="progress-more">+${statuses.length - visible.length}</span>` : ""}`;
+  const visible = statuses.slice(0, 40);
+  return `${visible.map((status, index) => `<span class="seg ${esc(status)}" title="Step ${index + 1}: ${esc(status)}"></span>`).join("")}${statuses.length > visible.length ? `<span class="progress-more">+${statuses.length - visible.length}</span>` : ""}`;
 }
 
 function renderSkeleton(run, agents, journal) {
@@ -1755,42 +1872,62 @@ function renderSkeleton(run, agents, journal) {
     run.result !== undefined && run.result !== null ? `<details class="support-panel wide" id="run-result"><summary>Result</summary><pre class="result mono">${esc(JSON.stringify(run.result, null, 2))}</pre></details>` : "",
   ].filter(Boolean).join("");
 
-  const stageWidth = Math.max(900, groups.length * 284);
+  const stageWidth = Math.max(760, groups.length * 264);
   const runStatus = displayRunStatus(run);
+  // Authored by whoever wrote the workflow, via `meta.creator`. Absent is the
+  // normal case for older runs — show nothing rather than invent an attribution.
+  const creator = typeof run.meta?.creator === "string" ? run.meta.creator.trim() : "";
   $("main").innerHTML = `<div class="workflow-shell">
     <article class="workflow-card">
       <header class="workflow-titlebar">
-        <span class="workflow-symbol" aria-hidden="true"><span>◇</span></span>
+        <svg class="workflow-symbol" viewBox="0 0 16 16" width="20" height="20" aria-hidden="true"><path d="M8 .8 15.2 8 8 15.2.8 8 8 .8Zm0 3.02L3.82 8 8 12.18 12.18 8 8 3.82Z"/></svg>
         <div class="workflow-heading">
-          <h2><span class="title">${esc(run.name ?? run.runId)}</span><span class="workflow-number">#${run.attempt ?? 1}</span>${pill(runStatus)}</h2>
-          ${run.description ? `<p class="description">${esc(run.description)}</p>` : ""}
+          <h2>
+            <span class="workflow-title">${esc(run.name ?? run.runId)}</span>
+            <span class="workflow-attempt">#${run.attempt ?? 1}</span>
+            ${pill(runStatus)}
+          </h2>
+          ${run.description ? `<p class="workflow-description">${esc(run.description)}</p>` : ""}
         </div>
-        <button class="titlebar-action" type="button" data-flow-focus aria-label="Jump to active step" title="Jump to active step"><span aria-hidden="true">⌗</span></button>
-        <div class="workflow-owner"><span class="creator-label">Creator</span><span class="creator-avatar" aria-hidden="true"></span><span>Wiff</span></div>
+        <button class="icon-button titlebar-focus" type="button" data-flow-focus aria-label="Jump to active step" title="Jump to active step">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 4.75A2.75 2.75 0 0 1 4.75 2h1a.75.75 0 0 1 0 1.5h-1c-.69 0-1.25.56-1.25 1.25v1a.75.75 0 0 1-1.5 0v-1Zm8.5-2A.75.75 0 0 1 11.25 2h1A2.75 2.75 0 0 1 15 4.75v1a.75.75 0 0 1-1.5 0v-1c0-.69-.56-1.25-1.25-1.25h-1a.75.75 0 0 1-.75-.75ZM2.75 9.5a.75.75 0 0 1 .75.75v1c0 .69.56 1.25 1.25 1.25h1a.75.75 0 0 1 0 1.5h-1A2.75 2.75 0 0 1 2 11.25v-1a.75.75 0 0 1 .75-.75Zm11.5 0a.75.75 0 0 1 .75.75v1A2.75 2.75 0 0 1 12.25 14h-1a.75.75 0 0 1 0-1.5h1c.69 0 1.25-.56 1.25-1.25v-1a.75.75 0 0 1 .75-.75ZM8 6a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"/></svg>
+        </button>
+        ${creator ? `<div class="workflow-owner">
+          <span class="label">Creator</span>
+          <span class="owner-monogram" aria-hidden="true">${esc(creator.slice(0, 1).toUpperCase())}</span>
+          <span class="owner-name">${esc(creator)}</span>
+        </div>` : ""}
       </header>
-      ${run.error ? `<div class="workflow-error">${STATUS_ICON.failed} ${esc(run.error.message)}</div>` : ""}
-      ${runStatus === "stalled" ? `<div class="workflow-error">${STATUS_ICON.stalled} The workflow owner has not updated its heartbeat for ${esc(fmtDur(run.heartbeatAgeMs))}.</div>` : ""}
+      ${run.error ? `<div class="workflow-error"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 7.5a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8Z"/></svg><span>${esc(run.error.message)}</span></div>` : ""}
+      ${runStatus === "stalled" ? `<div class="workflow-error"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 7.5a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8Z"/></svg><span>The workflow owner has not updated its heartbeat for ${esc(fmtDur(run.heartbeatAgeMs))}.</span></div>` : ""}
       <div class="flow-viewport" id="flow-viewport">
         <div class="flow-stage" id="flow-stage" style="--phase-count:${groups.length};--stage-width:${stageWidth}px">
           <svg class="flow-edges" id="flow-edges" aria-hidden="true"></svg>
           <div class="flow-grid" id="flow-grid" role="list" aria-label="Workflow phases">${groups.map(phaseColumn).join("")}</div>
         </div>
-        <button class="flow-focus" type="button" data-flow-focus aria-label="Focus active workflow step" title="Focus active step">⌗</button>
+        <button class="flow-focus" type="button" data-flow-focus aria-label="Focus active workflow step" title="Focus active step">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 4.75A2.75 2.75 0 0 1 4.75 2h1a.75.75 0 0 1 0 1.5h-1c-.69 0-1.25.56-1.25 1.25v1a.75.75 0 0 1-1.5 0v-1Zm8.5-2A.75.75 0 0 1 11.25 2h1A2.75 2.75 0 0 1 15 4.75v1a.75.75 0 0 1-1.5 0v-1c0-.69-.56-1.25-1.25-1.25h-1a.75.75 0 0 1-.75-.75ZM2.75 9.5a.75.75 0 0 1 .75.75v1c0 .69.56 1.25 1.25 1.25h1a.75.75 0 0 1 0 1.5h-1A2.75 2.75 0 0 1 2 11.25v-1a.75.75 0 0 1 .75-.75Zm11.5 0a.75.75 0 0 1 .75.75v1A2.75 2.75 0 0 1 12.25 14h-1a.75.75 0 0 1 0-1.5h1c.69 0 1.25-.56 1.25-1.25v-1a.75.75 0 0 1 .75-.75ZM8 6a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"/></svg>
+        </button>
       </div>
       <footer class="workflow-progress">
         <span class="progress-label">Progress</span>
         <span class="progress-now" id="progress-now" hidden></span>
-        <span class="progress-dots">${progressDots(agents, total)}</span>
-        <span class="progress-summary"><span><strong id="progress-count">${done}</strong>/${total || 0}</span><span id="elapsed"></span><span id="token-count">–</span></span>
+        <span class="progress-track">${progressTrack(agents, total)}</span>
+        <span class="progress-summary">
+          <span><strong id="progress-count">${done}</strong>/${total || 0}</span>
+          <span id="elapsed"></span>
+          <span class="progress-eta" id="eta"></span>
+          <span id="token-count">–</span>
+        </span>
       </footer>
     </article>
-    <div class="run-context">
-      <span><b>Run</b> <span class="mono">${esc(run.runId)}</span></span>
-      <span><b>Phase</b> <span id="phase-slot">${esc(run.phase ?? "—")}</span></span>
-      <span><b>Requested</b> <span id="requested-count">${run.stats?.requested ?? 0}</span></span>
-      <span><b>Failed</b> <span id="failed-count">${run.stats?.failed ?? 0}</span></span>
-      <span class="path" title="${esc(run.cwd ?? "")}"><b>Cwd</b> <span class="mono">${esc(run.cwd ?? "")}</span></span>
-    </div>
+    <dl class="run-context">
+      <div><dt>Run</dt><dd class="mono">${esc(run.runId)}</dd></div>
+      <div><dt>Phase</dt><dd id="phase-slot">${esc(run.phase ?? "—")}</dd></div>
+      <div><dt>Requested</dt><dd class="num" id="requested-count">${run.stats?.requested ?? 0}</dd></div>
+      <div><dt>Failed</dt><dd class="num" id="failed-count">${run.stats?.failed ?? 0}</dd></div>
+      <div><dt>Cwd</dt><dd class="mono path" title="${esc(run.cwd ?? "")}">${esc(run.cwd ?? "")}</dd></div>
+    </dl>
     <div class="support-grid">${supportPanels}</div>
   </div>`;
 
@@ -1826,7 +1963,7 @@ function drawConnectors() {
   const columns = [...stage.querySelectorAll(".phase-column")];
   const stageRect = stage.getBoundingClientRect();
   const width = stage.scrollWidth;
-  const height = Math.max(stage.scrollHeight, 440);
+  const height = Math.max(stage.scrollHeight, 240);
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("width", width);
   svg.setAttribute("height", height);
@@ -1893,6 +2030,17 @@ function updateDynamic() {
   const progressCount = $("progress-count");
   if (progressCount) progressCount.textContent = agents.filter((agent) => agent.status === "completed" || agent.status === "cached").length;
 
+  const etaElement = $("eta");
+  if (etaElement) {
+    const estimate = estimateRemaining(run, agents, now);
+    etaElement.textContent = estimate ? `~${fmtDur(estimate.remainingMs)} left` : "";
+    etaElement.title = estimate
+      ? `Projected finish around ${new Date(now + estimate.remainingMs).toLocaleTimeString()}`
+        + ` — extrapolated from ${estimate.completed} finished agent${estimate.completed === 1 ? "" : "s"}`
+        + ` and ${estimate.remaining} still to go. Workflows that loop can queue more work than this covers.`
+      : "";
+  }
+
   const totalTokens = agents.reduce((sum, agent) => sum + (agent.usage?.total?.totalTokens ?? 0), 0);
   const tokenCount = $("token-count");
   if (tokenCount) {
@@ -1946,7 +2094,7 @@ function updateDynamic() {
   const feed = $("activity-feed");
   if (feed && String(logs.length) !== feed.dataset.count) {
     feed.dataset.count = String(logs.length);
-    feed.innerHTML = logs.map((event) => `<div><span class="t mono">${fmtTime(event.at)}</span>${event.type === "phase"
+    feed.innerHTML = logs.map((event) => `<div><span class="t mono">${fmtClock(event.at)}</span>${event.type === "phase"
       ? `<span class="phase-ev">phase → ${esc(event.name)}</span>`
       : `<span class="mono value">${esc(typeof event.value === "string" ? event.value : JSON.stringify(event.value))}</span>`}</div>`).join("") || `<div class="empty">No activity yet.</div>`;
   }
@@ -1995,8 +2143,8 @@ async function refreshActive() {
     const payload = await fetchJson("/api/active");
     activeAgents = payload.agents;
     renderRunsList();
-    $("tick").textContent = payload.agents.length
-      ? `● ${payload.agents.length} agent${payload.agents.length === 1 ? "" : "s"} live`
+    $("tick").innerHTML = payload.agents.length
+      ? `<span class="dot running" aria-hidden="true"></span>${payload.agents.length} agent${payload.agents.length === 1 ? "" : "s"} live`
       : "";
   } catch {
     // Transient — keep the previous live state.
@@ -2084,7 +2232,7 @@ async function renderDrawerBody() {
         text = JSON.stringify(value, null, 2);
         content = renderTree(value, text);
       }
-      return `<div class="tr-event"><div class="m mono">${fmtTime(at)} · ${esc(event?.method ?? "")}${item?.type ? ` · ${esc(item.type)}` : ""}</div>${content}</div>`;
+      return `<div class="tr-event"><div class="m mono">${fmtClock(at)} · ${esc(event?.method ?? "")}${item?.type ? ` · ${esc(item.type)}` : ""}</div>${content}</div>`;
     }).join("") || `<div class="empty">No transcript events.</div>`;
     unmountVisualJsonRoots();
     body.innerHTML = html;
@@ -2141,7 +2289,7 @@ function openDrawer(runId, file, label, live, agentKey) {
   $("drawer-meta").textContent = [options.agentType ? `@${options.agentType}` : options.model, options.effort]
     .filter(Boolean)
     .join(" · ");
-  $("drawer-live").textContent = live ? "● live tail" : "";
+  $("drawer-live").innerHTML = live ? `<span class="dot running" aria-hidden="true"></span>live tail` : "";
   unmountVisualJsonRoots();
   $("drawer-body").innerHTML = `<div class="empty">Loading…</div>`;
   $("drawer").classList.add("open");
