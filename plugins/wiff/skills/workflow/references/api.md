@@ -8,6 +8,7 @@ Scripts use top-level `await` and `return`:
 export const meta = {
   name: "audit-routes",
   description: "Audit route authorization",
+  creator: "Claude Opus 5",
   phases: [{ title: "Audit", detail: "Inspect every route" }],
 };
 
@@ -25,6 +26,18 @@ return results;
 ```
 
 Workflow JavaScript cannot import modules or directly use the filesystem, shell, network, current time, or randomness. Ask an agent to perform external work.
+
+### `meta` fields
+
+`name` and `description` are required. `meta` must be a pure literal — no variables, calls, spreads, or interpolation.
+
+| Field | Purpose |
+| --- | --- |
+| `name` | Short run name, shown in the run list. |
+| `description` | One line explaining what the run does. |
+| `creator` | Who authored the workflow — set this to your own model name (for example `"Claude Opus 5"`, `"Codex"`, `"Kimi K3"`). The viewer attributes the run to it, and omits the attribution entirely when unset. |
+| `phases` | One entry per `phase()` call: `{ title, detail? }`. |
+| `whenToUse` | Shown in the saved-workflow list. |
 
 ## Globals
 
