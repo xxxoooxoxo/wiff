@@ -4,7 +4,7 @@ import { WorkflowManager } from "./runtime.mjs";
 import { serializeError } from "./util.mjs";
 
 const SERVER_NAME = "wiff";
-const SERVER_VERSION = "0.7.0";
+const SERVER_VERSION = "0.8.0";
 const CHILD_MODE = process.env.CODEX_WORKFLOW_CHILD === "1";
 
 const tools = [
