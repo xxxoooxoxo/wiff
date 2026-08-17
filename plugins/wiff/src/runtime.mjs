@@ -319,9 +319,22 @@ export class WorkflowManager {
 
     if (resumeRunId !== undefined) {
       runId = validateRunId(resumeRunId);
-      if (this.#active.has(runId)) throw new Error(`Workflow ${runId} is already running.`);
       runDirectory = path.join(this.runsDirectory, runId);
       run = await readJson(path.join(runDirectory, "run.json"));
+      const inFlight = this.#active.get(runId);
+      if (inFlight) {
+        // #execute persists the terminal status and only then does its
+        // .finally() drop the in-memory entry, so the two disagree for a short
+        // window. The documented flow -- wait until terminal, then resume --
+        // lands inside it, and rejecting there fails a legitimate resume. When
+        // the run is already terminal on disk the execution is about to settle,
+        // so let it, rather than treating it as still running.
+        if (TERMINAL_STATUSES.has(run.status)) {
+          await inFlight.promise.catch(() => {});
+          run = await readJson(path.join(runDirectory, "run.json"));
+        }
+        if (this.#active.has(runId)) throw new Error(`Workflow ${runId} is already running.`);
+      }
       if (run.status === "running" && isProcessAlive(run.ownerPid)) {
         throw new Error(`Workflow ${runId} is already running.`);
       }
