@@ -117,6 +117,32 @@ async function waitForTerminal(manager, runId) {
   return run;
 }
 
+// Stops on a terminal run, not just on a live agent. Waiting only for
+// `stats.running > 0` cannot make progress once the run has finished, so a lost
+// race turns into a hot spin that burns the entire CI job timeout in silence.
+// The deadline turns any future stall into a fast, named failure instead.
+async function waitForRunning(manager, runId, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  let run = await manager.status(runId);
+  while (run.stats.running === 0 && !TERMINAL.has(run.status)) {
+    if (Date.now() >= deadline) {
+      throw new Error(`run ${runId} never reported a running agent within ${timeoutMs}ms`);
+    }
+    run = await manager.wait(runId, 250);
+  }
+  return run;
+}
+
+// Same reasoning for predicate polling: bound it so a stuck condition fails
+// with its own description rather than hanging the suite.
+async function waitFor(description, predicate, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(`timed out after ${timeoutMs}ms waiting for ${description}`);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
 async function rewriteJournalAsLegacy(run, prompt, optionOverrides = {}) {
   const events = (await readFile(run.journalPath, "utf8"))
     .trim()
@@ -588,26 +614,34 @@ test("cancel drains both queued and executing agents", async () => {
 
 test("a second manager observes a live owner without interrupting it", async () => {
   const stateRoot = await mkdtemp(path.join(os.tmpdir(), "wiff-host-test-"));
-  const owner = new WorkflowManager({ stateRoot, backend: new FakeBackend(), maxConcurrency: 2 });
+  const ownerBackend = new FakeBackend();
+  const owner = new WorkflowManager({ stateRoot, backend: ownerBackend, maxConcurrency: 2 });
   const observer = new WorkflowManager({ stateRoot, backend: new FakeBackend(), maxConcurrency: 2 });
   try {
     await owner.initialize();
     const started = await owner.start({
       cwd: process.cwd(),
+      // BLOCK parks until this test releases it, so the run is guaranteed to
+      // still be live when the observer looks. A self-completing prompt made
+      // that a race, and a loaded runner loses it.
       script: `
         export const meta = { name: "cross-host", description: "Stay live across MCP hosts" };
-        return await agent("SLOW", { key: "slow" });
+        return await agent("BLOCK", { key: "blocked" });
       `,
     });
-    let running = await owner.status(started.runId);
-    while (running.stats.running === 0) running = await owner.wait(started.runId, 1_000);
+    await waitForRunning(owner, started.runId);
 
     await observer.initialize();
     assert.equal((await observer.status(started.runId)).status, "running");
+
+    ownerBackend.releaseBlockedAgent();
     const completed = await waitForTerminal(observer, started.runId);
     assert.equal(completed.status, "completed");
-    assert.equal(completed.result, "result:SLOW");
+    assert.equal(completed.result, "result:BLOCK");
   } finally {
+    // Idempotent, and keeps a failed assertion above from leaving the agent
+    // parked while close() waits on it.
+    ownerBackend.releaseBlockedAgent();
     await Promise.allSettled([owner.close(), observer.close()]);
     await rm(stateRoot, { recursive: true, force: true });
   }
@@ -626,8 +660,7 @@ test("a second manager can cancel a workflow owned by another host", async () =>
         return await agent("WAIT", { key: "wait", timeoutMs: 60000 });
       `,
     });
-    let running = await owner.status(started.runId);
-    while (running.stats.running === 0) running = await owner.wait(started.runId, 1_000);
+    await waitForRunning(owner, started.runId);
 
     await controller.initialize();
     const cancelled = await controller.cancel(started.runId);
@@ -834,7 +867,7 @@ test("interrupted agents resume mid-turn with a transcript digest injected", asy
       return await agent("WAIT", { key: "w", timeoutMs: 60000 });
     `;
     const started = await manager.start({ script, cwd: process.cwd() });
-    while (backend.calls[0]?.checkpointed !== true) await new Promise((r) => setTimeout(r, 20));
+    await waitFor("the agent to checkpoint", () => backend.calls[0]?.checkpointed === true);
     const interrupted = await manager.cancel(started.runId);
     await rewriteJournalAsLegacy(interrupted, "WAIT", { timeoutMs: 60_000 });
 
@@ -862,7 +895,7 @@ test("mid-turn resume reuses the interrupted attempt's worktree", async () => {
         });
       `;
       const started = await manager.start({ script, cwd: repo });
-      while (backend.calls[0]?.checkpointed !== true) await new Promise((r) => setTimeout(r, 20));
+      await waitFor("the agent to checkpoint", () => backend.calls[0]?.checkpointed === true);
       await manager.cancel(started.runId);
 
       const resumed = await manager.start({ resumeFromRunId: started.runId });

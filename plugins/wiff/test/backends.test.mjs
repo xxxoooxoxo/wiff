@@ -13,6 +13,17 @@ import {
 } from "../src/backends/codex.mjs";
 import { BackendRouter, inferProvider } from "../src/backends/index.mjs";
 
+// Bounded so a condition that never becomes true fails fast and by name,
+// instead of spinning silently until the CI job timeout kills the run.
+async function waitFor(description, predicate, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(`timed out after ${timeoutMs}ms waiting for ${description}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+
 const STUB_SOURCE = `#!/usr/bin/env node
 const chunks = [];
 process.stdin.on("data", (chunk) => chunks.push(chunk));
@@ -619,7 +630,7 @@ test("claude backend aborts by killing the child", async () => {
       signal: controller.signal,
       onEvent: (event) => events.push(event),
     });
-    while (events.length === 0) await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitFor("the backend to emit its first event", () => events.length > 0);
     controller.abort(new Error("stop now"));
     await assert.rejects(pending, /stop now/);
   });

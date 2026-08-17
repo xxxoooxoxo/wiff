@@ -3,6 +3,17 @@ import test from "node:test";
 import { CursorBackend, cursorModelSelection } from "../src/backends/cursor.mjs";
 import { inferProvider } from "../src/backends/index.mjs";
 
+// Bounded so a condition that never becomes true fails fast and by name,
+// instead of spinning silently until the CI job timeout kills the run.
+async function waitFor(description, predicate, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(`timed out after ${timeoutMs}ms waiting for ${description}`);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+
 // In-memory stand-in for @cursor/sdk's Agent/Run surface.
 function makeFakeSdk({ behavior = "success" } = {}) {
   const state = { creates: [], sends: [], cancelled: 0, disposed: 0 };
@@ -246,7 +257,7 @@ test("cursor backend surfaces turn failures and aborts via run.cancel", async ()
     options: options(),
     signal: controller.signal,
   });
-  while (!hanging.state.lastRun) await new Promise((resolve) => setTimeout(resolve, 5));
+  await waitFor("the cursor backend to record a run", () => Boolean(hanging.state.lastRun));
   controller.abort(new Error("stop now"));
   await assert.rejects(pending, /stop now/);
   assert.ok(hanging.state.cancelled >= 1);
