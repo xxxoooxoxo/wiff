@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { WorkflowManager } from "../src/runtime.mjs";
-import { atomicWriteJson, hashValue } from "../src/util.mjs";
+import { atomicWriteJson, hashValue, readJson } from "../src/util.mjs";
 
 const execFileAsync = promisify(execFile);
 const TERMINAL = new Set(["completed", "failed", "cancelled", "interrupted"]);
@@ -858,6 +858,36 @@ test("editing a persona invalidates the resume cache", async () => {
   } finally {
     await rm(agentsDir, { recursive: true, force: true });
   }
+});
+
+test("resume succeeds while the finished run is still in the active map", async () => {
+  await withManager(async ({ manager }) => {
+    const script = `
+      export const meta = { name: "resume-window", description: "Resume right after terminal" };
+      return await agent("quick", { key: "quick" });
+    `;
+    // Whether a single attempt lands inside the window is a coin flip, so run
+    // the cycle repeatedly. Against the unfixed runtime this reproduces well
+    // inside ten rounds; one round caught it only about a fifth of the time.
+    for (let round = 0; round < 10; round += 1) {
+      const started = await manager.start({ script, cwd: process.cwd() });
+
+      // Read the terminal status straight off disk, which is what wait() polls.
+      // This can return before #execute's .finally() has run, leaving the run
+      // terminal on disk and still in the active map -- exactly the window a
+      // caller following "wait until terminal, then resume" hits.
+      let persisted = await readJson(started.runPath);
+      const deadline = Date.now() + 10_000;
+      while (!TERMINAL.has(persisted.status)) {
+        if (Date.now() >= deadline) throw new Error("run never reached a terminal status on disk");
+        persisted = await readJson(started.runPath);
+      }
+      assert.equal(persisted.status, "completed");
+
+      const resumed = await manager.start({ resumeFromRunId: started.runId });
+      assert.equal((await waitForTerminal(manager, resumed.runId)).status, "completed");
+    }
+  });
 });
 
 test("interrupted agents resume mid-turn with a transcript digest injected", async () => {
