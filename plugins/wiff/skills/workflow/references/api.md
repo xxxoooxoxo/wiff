@@ -233,6 +233,34 @@ Run items concurrently and stages sequentially per item. The first stage receive
 
 Record phase and diagnostic events in the run journal.
 
+## Persistent daemon ownership
+
+The stdio MCP server is a disposable bridge to one detached daemon per Wiff state root. A run
+started through `workflow_start` is daemon-owned: closing or killing the MCP bridge or launching
+harness does not interrupt it. A later client can reconnect with the returned run id and call
+`workflow_status`, `workflow_wait`, or `workflow_cancel`.
+
+The daemon writes `daemon.json` and `daemon.log` under the Wiff state root. Its private control
+directory contains owner metadata and a 0600 secret used for mutual challenge-response
+authentication, so the bridge verifies daemon identity before sending workflow scripts or
+arguments. A secret-derived loopback port is the authoritative OS ownership lease: exactly one
+daemon can hold it, it has no stale filesystem state, and it remains held until interruption state
+and endpoint shutdown are complete. Lease holders authenticate with the same control secret; an
+unrelated listener produces an explicit ownership-port conflict rather than impersonating Wiff.
+Set `WIFF_DAEMON_OWNERSHIP_PORT` to choose another loopback port when needed. The daemon exits after
+15 minutes with no controller activity and no active runs. Set `WIFF_DAEMON_IDLE_MS` to change the
+idle period.
+
+The daemon inherits its environment from the first bridge that starts it, including `PATH`, backend
+credentials, `CODEX_HOME`, persona paths, and Wiff defaults. If those values change, gracefully
+terminate the pid in `daemon.json` or wait for idle shutdown; active durable runs are restart-safe
+and resume when the next bridge starts.
+
+A graceful daemon stop interrupts its active agents only after recording them as safe to restart;
+the next daemon automatically resumes those runs. An abrupt daemon or machine crash cannot prove
+that every backend child stopped, so Wiff marks affected runs `interrupted` and requires explicit
+`workflow_start({ resumeFromRunId })` rather than risk duplicate side effects.
+
 ## Mid-turn resume
 
 Resuming a run replays completed agents from cache; agents whose previous attempt

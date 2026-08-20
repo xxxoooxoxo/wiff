@@ -5,7 +5,8 @@ Claude Code, Cursor, and Kimi, exposed as a harness-agnostic MCP server. Write p
 `agent()`, `/goal` stages, `parallel()`, and `pipeline()`; wiff runs the children on a pluggable backend
 (Codex app-server threads, headless `claude` or `kimi`, or the Cursor SDK — chosen per agent
 from the model name), journals every step, and resumes interrupted runs without re-paying for
-completed work.
+completed work. Its stdio MCP process is a disposable bridge to a detached local daemon, so active
+workflows continue if the launching harness or bridge exits.
 
 At a Codex stage that must keep going until a condition is genuinely met, prefix the agent prompt
 with `/goal`:
@@ -36,6 +37,18 @@ Run the server (any MCP client):
 npx @xxxoooxoxo/wiff                      # stdio MCP server: start / status / wait / cancel / models
 npx -p @xxxoooxoxo/wiff wiff-viewer       # live web viewer on http://127.0.0.1:4979
 ```
+
+The first controller call starts one daemon per Wiff state root. Later MCP processes reconnect to
+that daemon over an authenticated local socket. A challenge-response handshake backed by a 0600
+secret proves daemon identity before the bridge sends workflow scripts or arguments. Graceful
+daemon restarts automatically resume active durable runs; abrupt daemon death leaves runs
+`interrupted` for explicit journaled resume. The daemon exits after 15 idle minutes by default
+(`WIFF_DAEMON_IDLE_MS` overrides this). It inherits `PATH`, credentials, persona paths, and Wiff
+defaults from the first bridge until restart; gracefully terminate the pid in `~/.wiff/daemon.json`
+when those values change. A secret-derived loopback lease is held until shutdown completes, giving
+exactly one daemon OS-level ownership even when stale socket or lock files remain after a crash.
+An authenticated lease challenge distinguishes another Wiff owner from unrelated local software;
+set `WIFF_DAEMON_OWNERSHIP_PORT` if the reported secret-derived port is already occupied.
 
 Goal stages are marked directly in the workflow graph as queued, active, met, failed, or replayed.
 

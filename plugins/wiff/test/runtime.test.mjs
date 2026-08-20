@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -668,6 +668,50 @@ test("a second manager can cancel a workflow owned by another host", async () =>
     assert.match(cancelled.error.message, /cancelled/i);
   } finally {
     await Promise.allSettled([owner.close(), controller.close()]);
+    await rm(stateRoot, { recursive: true, force: true });
+  }
+});
+
+test("abrupt owner death stays interrupted until an explicit resume", async () => {
+  const stateRoot = await mkdtemp(path.join(os.tmpdir(), "wiff-abrupt-owner-"));
+  const runId = "wf_abrupt_owner";
+  const runDirectory = path.join(stateRoot, "runs", runId);
+  const runPath = path.join(runDirectory, "run.json");
+  const manager = new WorkflowManager({
+    stateRoot,
+    backend: new FakeBackend(),
+    maxConcurrency: 2,
+  });
+  try {
+    await mkdir(runDirectory, { recursive: true });
+    await writeFile(
+      runPath,
+      `${JSON.stringify({
+        schemaVersion: 1,
+        runId,
+        status: "running",
+        durable: true,
+        restartSafe: true,
+        ownerPid: 2_147_483_647,
+        ownerHeartbeatAt: new Date(0).toISOString(),
+        cwd: process.cwd(),
+        attempt: 1,
+        revision: 1,
+        runPath,
+        journalPath: path.join(runDirectory, "journal.jsonl"),
+        scriptPath: path.join(runDirectory, "script.js"),
+        stats: { requested: 1, queued: 0, running: 1, completed: 0, failed: 0, cached: 0 },
+      })}\n`,
+    );
+
+    await manager.initialize();
+    assert.deepEqual(await manager.recoverDurableRuns(), []);
+    const interrupted = await manager.status(runId);
+    assert.equal(interrupted.status, "interrupted");
+    assert.equal(interrupted.restartSafe, false);
+    assert.equal(manager.activeCount, 0);
+  } finally {
+    await manager.close();
     await rm(stateRoot, { recursive: true, force: true });
   }
 });

@@ -4,7 +4,7 @@ Instructions for coding agents. Two audiences: agents **orchestrating with wiff*
 
 ## Orchestrating with wiff (driving it from a harness)
 
-wiff is an MCP server exposing five tools: `workflow_start`, `workflow_status`, `workflow_wait`, `workflow_cancel`, and `workflow_models`. You author a workflow as a plain JavaScript script and pass it to `workflow_start` with an absolute `cwd`; the run executes in the background and everything persists under `~/.wiff/runs/<runId>/`.
+wiff exposes five MCP tools through a disposable stdio bridge: `workflow_start`, `workflow_status`, `workflow_wait`, `workflow_cancel`, and `workflow_models`. The bridge auto-starts a detached local daemon that owns workflow execution, so runs survive the launching harness or MCP process exiting. You author a workflow as a plain JavaScript script and pass it to `workflow_start` with an absolute `cwd`; everything persists under `~/.wiff/runs/<runId>/`.
 
 **Before authoring a script, read [`plugins/wiff/skills/workflow/references/api.md`](plugins/wiff/skills/workflow/references/api.md) — it is the full script contract.** Inside Codex the bundled `$workflow` skill loads it for you; from any other harness, read it (or copy the skill into your harness's skills directory).
 
@@ -19,11 +19,13 @@ Rules that catch agents out:
 - **Concurrency is capped** at `min(16, max(2, cores − 2))` running children (excess queue), and a run may request at most 1000 agents.
 - **Personas** (`agentType: "name"`) resolve from `<cwd>/.codex/agents/<name>.md`, then `~/.codex/agents/<name>.md` (`CODEX_WORKFLOW_AGENTS_DIR` overrides). Editing a persona invalidates the cache of agents that use it.
 - **Don't poll blindly.** `workflow_wait` blocks up to 55 s for a state change; loop on it rather than hammering `workflow_status`.
+- **The parent may disconnect.** Preserve the `runId` before ending the parent turn. A later MCP bridge can wait, inspect, or cancel the same daemon-owned run. Graceful daemon restarts resume durable active runs; abrupt daemon death leaves them safely `interrupted` for explicit resume.
+- **The first bridge supplies daemon environment.** The daemon inherits that bridge's `PATH`, backend credentials, and Wiff/Codex environment defaults until it restarts. If those values change, gracefully terminate the pid in `~/.wiff/daemon.json` or wait for idle shutdown before starting new work.
 - **Inspect failures from disk.** `~/.wiff/runs/<runId>/journal.jsonl` records every phase/agent event with input hashes and token usage; `agents/*.jsonl` hold full per-child transcripts. Read those before re-running anything.
 
 ## Working on this codebase
 
-- Layout: the whole runtime lives in [`plugins/wiff/`](plugins/wiff/) — `src/server.mjs` (MCP surface), `src/runtime.mjs` (script VM, agent dispatch, journal/resume), `src/workflow-worker.mjs` (run loop), `src/app-server-client.mjs` (Codex app-server transport), `scripts/viewer.mjs` + `scripts/viewer.html` (live viewer), `skills/workflow/` (the bundled skill and API reference).
+- Layout: the whole runtime lives in [`plugins/wiff/`](plugins/wiff/) — `src/server.mjs` (disposable MCP bridge), `src/daemon.mjs` + `src/daemon-client.mjs` (persistent execution owner and local-socket client), `src/runtime.mjs` (script VM, agent dispatch, journal/resume), `src/workflow-worker.mjs` (run loop), `src/app-server-client.mjs` (Codex app-server transport), `scripts/viewer.mjs` + `scripts/viewer.html` (live viewer), `skills/workflow/` (the bundled skill and API reference).
 - **Zero runtime dependencies** — keep it that way. Node >= 22, plain ESM, no build step, no TypeScript.
 - Verify changes from `plugins/wiff/`:
   - `npm test` — unit tests against a fake backend; spends no tokens.

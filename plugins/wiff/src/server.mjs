@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import readline from "node:readline";
-import { WorkflowManager } from "./runtime.mjs";
+import { callDaemon } from "./daemon-client.mjs";
 import { serializeError } from "./util.mjs";
+import { WIFF_VERSION } from "./version.mjs";
 
 const SERVER_NAME = "wiff";
-const SERVER_VERSION = "0.8.0";
 const CHILD_MODE = process.env.CODEX_WORKFLOW_CHILD === "1";
 
 const tools = [
@@ -94,9 +94,6 @@ const tools = [
   },
 ];
 
-const manager = CHILD_MODE ? null : new WorkflowManager();
-if (manager) await manager.initialize();
-
 function send(message) {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
@@ -114,6 +111,7 @@ function summarizeRun(run) {
     `Workflow ${run.runId}: ${run.status}`,
     run.name ? `Name: ${run.name}` : null,
     run.phase ? `Phase: ${run.phase}` : null,
+    run.durable ? "Execution: persistent daemon" : null,
     `Agents: ${run.stats?.completed ?? 0} completed, ${run.stats?.failed ?? 0} failed, ${run.stats?.cached ?? 0} cached, ${run.stats?.queued ?? 0} queued, ${run.stats?.running ?? 0} executing`,
     run.preferenceSources?.length
       ? `Preferences: ${run.preferenceSources.map((source) => source.path).join(", ")}`
@@ -155,15 +153,24 @@ function summarizeModels(backends) {
 }
 
 async function callTool(name, args) {
-  if (!manager) throw new Error("Workflow tools are disabled inside workflow child agents.");
-  if (name === "workflow_start") return toolResult(await manager.start(args ?? {}));
-  if (name === "workflow_status") return toolResult(await manager.status(args?.runId));
-  if (name === "workflow_wait") {
-    return toolResult(await manager.wait(args?.runId, args?.timeoutMs ?? 55_000));
+  if (CHILD_MODE) throw new Error("Workflow tools are disabled inside workflow child agents.");
+  if (name === "workflow_start") return toolResult(await callDaemon("start", args ?? {}));
+  if (name === "workflow_status") {
+    return toolResult(await callDaemon("status", { runId: args?.runId }));
   }
-  if (name === "workflow_cancel") return toolResult(await manager.cancel(args?.runId));
+  if (name === "workflow_wait") {
+    return toolResult(
+      await callDaemon("wait", {
+        runId: args?.runId,
+        timeoutMs: args?.timeoutMs ?? 55_000,
+      }),
+    );
+  }
+  if (name === "workflow_cancel") {
+    return toolResult(await callDaemon("cancel", { runId: args?.runId }));
+  }
   if (name === "workflow_models") {
-    const backends = await manager.listModels();
+    const backends = await callDaemon("models");
     return {
       content: [{ type: "text", text: summarizeModels(backends) }],
       structuredContent: { backends },
@@ -178,10 +185,10 @@ async function handleRequest(message) {
     sendResult(id, {
       protocolVersion: params?.protocolVersion ?? "2025-11-25",
       capabilities: { tools: {} },
-      serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
+      serverInfo: { name: SERVER_NAME, version: WIFF_VERSION },
       instructions: CHILD_MODE
         ? "Workflow tools are intentionally disabled inside workflow child agents to prevent recursive orchestration."
-        : "Use workflows for deterministic fan-out, pipelines, and resumable work. Wiff automatically applies user and project preferences from its config files. After workflow_start, call workflow_wait until the run is terminal. Parallel writes to one checkout must be serialized.",
+        : "Use workflows for deterministic fan-out, pipelines, and resumable work. Wiff automatically applies user and project preferences from its config files. Runs are owned by a persistent local daemon and survive this MCP bridge disconnecting. After workflow_start, record the run id and call workflow_wait until the run is terminal when the parent remains available. Parallel writes to one checkout must be serialized.",
     });
     return;
   }
@@ -221,13 +228,6 @@ lines.on("line", (line) => {
   });
 });
 
-let closing = false;
-async function close() {
-  if (closing) return;
-  closing = true;
-  await manager?.close();
-}
-
-lines.on("close", () => close().finally(() => process.exit(0)));
-process.on("SIGINT", () => close().finally(() => process.exit(0)));
-process.on("SIGTERM", () => close().finally(() => process.exit(0)));
+lines.on("close", () => process.exit(0));
+process.on("SIGINT", () => process.exit(0));
+process.on("SIGTERM", () => process.exit(0));

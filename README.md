@@ -4,7 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/%40xxxoooxoxo%2Fwiff?label=npm&color=cb3837)](https://www.npmjs.com/package/@xxxoooxoxo/wiff) [![MCP Registry](https://img.shields.io/badge/MCP_Registry-io.github.xxxoooxoxo%2Fwiff-6b46c1)](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.xxxoooxoxo/wiff) ![MIT License](https://img.shields.io/badge/license-MIT-blue) ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
 
-Fan a task out to a fleet of agents with a small script instead of a prayer. You write ordinary JavaScript with `agent()`, `/goal` stages, `parallel()`, and `pipeline()`; the runtime executes it in the background, journals every step, and — when a run dies halfway through — resumes it without re-paying for a single completed agent. The engine is a plain MCP server with durable on-disk state, so the same run can be started, watched, resumed, or cancelled from **any** MCP client — Codex, Claude Code, Cursor, or a cron job — while each child runs on Codex, Claude, Cursor, or Kimi.
+Fan a task out to a fleet of agents with a small script instead of a prayer. You write ordinary JavaScript with `agent()`, `/goal` stages, `parallel()`, and `pipeline()`; the runtime executes it in the background, journals every step, and — when a run dies halfway through — resumes it without re-paying for a single completed agent. A disposable MCP bridge talks to a persistent local daemon, so active workflows outlive the Codex, Claude Code, Cursor, or cron process that launched them while each child runs on Codex, Claude, Cursor, or Kimi.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/run-light.png">
@@ -93,16 +93,17 @@ backends, and applicable preference changes invalidate cached results on resume.
 multi-agent story — Claude Code has its Workflow tool, Codex has subagents, Cursor has its own
 agents — but each one is welded to its harness: its runs live and die with that app, its state is
 invisible to everything else, and none of them can be driven from anywhere but their own chat
-window. wiff pulls orchestration out of the harness: the engine is a plain MCP server with durable
-on-disk state, so **any** MCP client — Codex, Claude Code, Cursor, a cron job — can start, watch,
-resume, or cancel the same runs, and the orchestration itself is a script rather than a
-conversation.
+window. wiff pulls orchestration out of the harness: a persistent local daemon owns execution and
+durable on-disk state while each harness gets a disposable stdio MCP bridge. **Any** MCP client —
+Codex, Claude Code, Cursor, a cron job — can start, disconnect from, watch, resume, or cancel the
+same runs, and the orchestration itself is a script rather than a conversation.
 
 Ad-hoc multi-agent orchestration ("spawn some subagents for this") is also great until the run is
 40 agents deep and something dies. Workflows-as-code give you:
 
 - **Determinism** — the orchestration is a script, not vibes. No time, randomness, filesystem, or network inside workflow code; agents do the external work.
-- **Resume, not retry** — every agent call is journaled with a stable key and an input hash. Kill the host, edit the script, resume the run: unchanged completed agents replay from cache instantly and for free. Agents that were interrupted **mid-turn** re-run with a digest of their previous attempt's transcript injected ("here's what you already did — continue"), and worktree agents inherit their partial checkout instead of starting over.
+- **Outlive the parent** — closing or killing the launching MCP bridge does not interrupt a run. The detached daemon keeps executing, and another harness can reconnect with the run id.
+- **Resume, not retry** — every agent call is journaled with a stable key and an input hash. A graceful daemon restart automatically resumes durable active runs. After an abrupt daemon or machine crash, explicitly resume the safely interrupted run: unchanged completed agents replay from cache instantly and for free. Agents that were interrupted **mid-turn** re-run with a digest of their previous attempt's transcript injected ("here's what you already did — continue"), and worktree agents inherit their partial checkout instead of starting over.
 
   <img alt="A resumed run: attempt 2, with the inventory agent and all three audit agents replayed from cache in 0ms and only the interrupted synthesis agent re-running." src="docs/screenshots/resume-dark.png">
 
@@ -201,6 +202,22 @@ Notes for non-Codex hosts:
 - **State is shared.** Every harness reads and writes the same `~/.wiff/runs/`, so a run started
   from Codex can be watched, cancelled, or resumed from Claude Code (and vice versa), and the
   live viewer sees everything.
+- **Execution is daemon-owned.** The first controller call starts one detached daemon per Wiff
+  state root. MCP bridges may exit without affecting active work. The daemon exits after 15 idle
+  minutes by default (`WIFF_DAEMON_IDLE_MS` overrides this) and writes its pid, socket, and log to
+  `~/.wiff/daemon.json` and `~/.wiff/daemon.log`.
+- **Controllers authenticate before sending work.** A 0600 secret under `~/.wiff/control/` drives
+  a challenge-response handshake. The bridge proves daemon identity before transmitting workflow
+  scripts or arguments; the daemon also authenticates every controller request.
+- **Ownership is an OS lease, not a stale file.** A secret-derived loopback port is held for the
+  daemon's complete lifetime. The operating system grants it to exactly one owner and releases it
+  automatically on crash; only that owner may replace the control socket or lock metadata. If the
+  derived port conflicts with unrelated local software, set `WIFF_DAEMON_OWNERSHIP_PORT` to an
+  available loopback port; Wiff reports the exact conflict rather than treating it as a live owner.
+- **The first controller supplies the daemon environment.** `PATH`, backend credentials,
+  `CODEX_HOME`, persona paths, and Wiff defaults remain those of the bridge that started the daemon.
+  If they change, gracefully terminate the pid recorded in `~/.wiff/daemon.json` (active durable
+  runs resume when the next bridge starts) or wait for the 15-minute idle shutdown.
 - **Bring the script contract into context.** The `$workflow` skill only auto-loads inside Codex.
   From other harnesses, point the model at
   [`plugins/wiff/skills/workflow/references/api.md`](plugins/wiff/skills/workflow/references/api.md)
@@ -218,7 +235,7 @@ If you are a coding agent — driving wiff over MCP or hacking on this repo — 
 
 ## How it works
 
-The plugin is an MCP server exposing five tools: `workflow_start`, `workflow_status`, `workflow_wait`, `workflow_cancel`, and `workflow_models`. A started workflow runs its script inside a locked-down Node `vm` (no imports, filesystem, shell, network, time, or randomness — those all throw). Each `agent()` call is routed to the Codex, Claude, Cursor, or Kimi backend from its model name or explicit `provider`; recursive orchestration is disabled inside children.
+The plugin exposes five tools through a stdio MCP bridge: `workflow_start`, `workflow_status`, `workflow_wait`, `workflow_cancel`, and `workflow_models`. The bridge connects over an authenticated local socket to an on-demand detached daemon. The daemon owns the workflow manager, backends, heartbeats, and journals, so closing the bridge cannot kill active work. A secret-derived loopback lease gives exactly one process OS-level ownership for its full lifetime; only that owner may replace socket and lock metadata. A challenge-response handshake proves daemon identity before scripts or arguments cross the connection. A started workflow runs its script inside a locked-down Node `vm` (no imports, filesystem, shell, network, time, or randomness — those all throw). Each `agent()` call is routed to the Codex, Claude, Cursor, or Kimi backend from its model name or explicit `provider`; recursive orchestration is disabled inside children.
 
 Everything about a run persists under `~/.wiff/runs/<runId>/`:
 
@@ -230,7 +247,7 @@ agents/*.jsonl   full per-child transcripts
 worktrees/       isolated checkouts for agents that asked for them
 ```
 
-Status, waits, cancellation, and resume all work across host restarts — another MCP client or session can observe, cancel, or resume a run it didn't start.
+Status, waits, and cancellation work while the launching host is gone. Graceful daemon restarts resume active durable runs automatically. An abrupt daemon crash is deliberately conservative: the next daemon marks the run `interrupted` rather than risking duplicate side effects, and any client can resume it from the journal.
 
 See [the API reference](plugins/wiff/skills/workflow/references/api.md) for the full script contract and [`examples/verify-and-fix.js`](plugins/wiff/examples/verify-and-fix.js) for a staged example.
 
