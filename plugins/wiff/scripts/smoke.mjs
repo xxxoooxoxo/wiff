@@ -1,19 +1,31 @@
 import { spawn } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
+import { stopDaemon } from "../src/daemon-client.mjs";
 
 const pluginDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const serverPath = path.join(pluginDirectory, "src", "server.mjs");
+const resumeRunId = process.argv[2];
+const ownsStateRoot =
+  !resumeRunId && !process.env.WIFF_HOME && !process.env.CODEX_WORKFLOW_HOME;
+const stateRoot = ownsStateRoot
+  ? await mkdtemp(path.join(os.tmpdir(), "wiff-smoke-"))
+  : process.env.WIFF_HOME ?? process.env.CODEX_WORKFLOW_HOME;
 const server = spawn(process.execPath, [serverPath], {
   cwd: pluginDirectory,
   stdio: ["pipe", "pipe", "inherit"],
-  env: { ...process.env, CODEX_WORKFLOW_CHILD: "0" },
+  env: {
+    ...process.env,
+    CODEX_WORKFLOW_CHILD: "0",
+    ...(stateRoot ? { WIFF_HOME: stateRoot } : {}),
+  },
 });
 const lines = readline.createInterface({ input: server.stdout });
 const pending = new Map();
 let nextId = 1;
-const resumeRunId = process.argv[2];
 
 lines.on("line", (line) => {
   const message = JSON.parse(line);
@@ -96,4 +108,11 @@ try {
 } finally {
   server.stdin.end();
   await new Promise((resolve) => server.once("exit", resolve));
+  if (ownsStateRoot) {
+    try {
+      await stopDaemon({ stateRoot });
+    } finally {
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  }
 }

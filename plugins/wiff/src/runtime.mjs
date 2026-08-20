@@ -10,6 +10,7 @@ import {
   loadWorkflowPreferences,
 } from "./preferences.mjs";
 import { Semaphore } from "./semaphore.mjs";
+import { defaultStateRoot } from "./state.mjs";
 import {
   JsonlWriter,
   atomicWriteJson,
@@ -40,13 +41,7 @@ const CANCEL_FILE_NAME = "cancel.json";
 const WORKER_PATH = fileURLToPath(new URL("./workflow-worker.mjs", import.meta.url));
 const SOURCE_DIRECTORY = path.dirname(WORKER_PATH);
 
-function defaultStateRoot() {
-  return (
-    process.env.WIFF_HOME ??
-    process.env.CODEX_WORKFLOW_HOME ??
-    path.join(os.homedir(), ".wiff")
-  );
-}
+export { defaultStateRoot } from "./state.mjs";
 
 function defaultAgentsDir() {
   const codexHome = process.env.CODEX_HOME ?? path.join(os.homedir(), ".codex");
@@ -94,11 +89,18 @@ function isProcessAlive(pid) {
   }
 }
 
-function markInterrupted(run) {
+function markInterrupted(
+  run,
+  {
+    restartSafe = false,
+    message = "The workflow host exited before this run reached a terminal state. Resume it to continue.",
+  } = {},
+) {
   run.status = "interrupted";
+  run.restartSafe = restartSafe;
   run.error = {
     name: "InterruptedError",
-    message: "The workflow host exited before this run reached a terminal state. Resume it to continue.",
+    message,
   };
   run.completedAt = new Date().toISOString();
   run.updatedAt = run.completedAt;
@@ -291,6 +293,10 @@ export class WorkflowManager {
     this.writeRun = writeRun;
   }
 
+  get activeCount() {
+    return this.#active.size;
+  }
+
   async initialize() {
     if (this.#initialized) return;
     this.#initialized = true;
@@ -307,6 +313,25 @@ export class WorkflowManager {
         // Ignore unrelated or incomplete directories.
       }
     }
+  }
+
+  async recoverDurableRuns() {
+    await this.initialize();
+    const recovered = [];
+    for (const entry of await readdir(this.runsDirectory, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      try {
+        const run = await readJson(path.join(this.runsDirectory, entry.name, "run.json"));
+        if (run.status !== "interrupted" || run.durable !== true || run.restartSafe !== true) {
+          continue;
+        }
+        await this.start({ resumeFromRunId: run.runId, cwd: run.cwd, durable: true });
+        recovered.push(run.runId);
+      } catch (error) {
+        recovered.push({ runId: entry.name, error: serializeError(error) });
+      }
+    }
+    return recovered;
   }
 
   async start(input) {
@@ -393,6 +418,8 @@ export class WorkflowManager {
     const now = new Date().toISOString();
     Object.assign(run, {
       status: "running",
+      durable: input?.durable ?? run.durable ?? false,
+      restartSafe: false,
       ownerPid: process.pid,
       ownerHeartbeatAt: now,
       sourceHash: hashText(source),
@@ -415,6 +442,7 @@ export class WorkflowManager {
       worker: undefined,
       promise: undefined,
       stopKind: undefined,
+      restartSafe: false,
       cancelWatcher: undefined,
       pendingAgents: new Set(),
       preferences,
@@ -462,6 +490,7 @@ export class WorkflowManager {
     try {
       const result = await this.#runWorker({ run, source, execution, journal, cache, unfinished });
       run.status = "completed";
+      run.restartSafe = false;
       run.result = jsonClone(result, "workflow result");
       await journal.append({
         type: "run.completed",
@@ -473,6 +502,7 @@ export class WorkflowManager {
       const stopped = execution.abortController.signal.aborted;
       const interrupted = stopped && execution.stopKind === "interrupted";
       run.status = interrupted ? "interrupted" : stopped ? "cancelled" : "failed";
+      run.restartSafe = interrupted && execution.restartSafe === true;
       run.error = serializeError(
         stopped
           ? execution.abortController.signal.reason ?? new Error("Workflow cancelled.")
@@ -1197,10 +1227,11 @@ export class WorkflowManager {
     for (const waiter of this.#waiters.get(runId) ?? []) waiter();
   }
 
-  async close() {
+  async close({ restartSafe = false } = {}) {
     const executions = [...this.#active.values()];
     for (const execution of executions) {
       execution.stopKind = "interrupted";
+      execution.restartSafe = restartSafe;
       execution.abortController.abort(new Error("Workflow host is shutting down."));
     }
     await Promise.allSettled(executions.map(({ promise }) => promise));

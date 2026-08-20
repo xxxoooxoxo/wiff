@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { appendFile, link, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export function serializeError(error) {
@@ -65,6 +65,21 @@ export async function atomicWriteJson(filePath, value) {
   const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   await rename(temporaryPath, filePath);
+}
+
+export async function writeExclusiveFile(filePath, contents, mode = 0o600) {
+  await ensureDir(path.dirname(filePath));
+  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  await writeFile(temporaryPath, contents, { encoding: "utf8", flag: "wx", mode });
+  try {
+    await link(temporaryPath, filePath);
+    return true;
+  } catch (error) {
+    if (error?.code === "EEXIST") return false;
+    throw error;
+  } finally {
+    await rm(temporaryPath, { force: true });
+  }
 }
 
 export async function appendJsonl(filePath, value) {
