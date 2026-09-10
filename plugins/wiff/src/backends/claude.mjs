@@ -5,8 +5,9 @@ import { serializeError } from "../util.mjs";
 
 const READ_ONLY_TOOLS = "Read,Glob,Grep";
 
-// Claude effort tiers are a superset of Codex's; only "minimal" needs mapping.
-const EFFORT_MAP = { minimal: "low" };
+// The claude CLI accepts low/medium/high/xhigh/max. Codex's "minimal" and the
+// GPT-6 Astra "ultra" tier need mapping so cross-backend fallbacks keep working.
+const EFFORT_MAP = { minimal: "low", ultra: "max" };
 
 // Translate one claude stream-json content block into the Codex app-server
 // item shape the journal digests and viewer already understand.
@@ -118,6 +119,13 @@ export class ClaudeBackend {
     const aliasNote =
       "Moving family alias resolved by the claude CLI; use a full claude-* id to pin a generation.";
     return [
+      {
+        id: "claude-fable-5-1",
+        displayName: "Claude Fable 5.1",
+        description: "Most capable Claude model; successor to Fable 5 for the hardest agentic work.",
+        efforts,
+        note: fullIdNote,
+      },
       {
         id: "claude-fable-5",
         displayName: "Claude Fable 5",

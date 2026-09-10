@@ -210,7 +210,9 @@ test("inferProvider maps model prefixes", () => {
   assert.equal(inferProvider("gpt-5.6-sol"), "codex");
   assert.equal(inferProvider("o3-mini"), "codex");
   assert.equal(inferProvider("codex-mini"), "codex");
+  assert.equal(inferProvider("gpt-6-astra"), "codex");
   assert.equal(inferProvider("claude-opus-4-8"), "claude");
+  assert.equal(inferProvider("claude-fable-5-1"), "claude");
   assert.equal(inferProvider("opus"), "claude");
   assert.equal(inferProvider("fable"), "claude");
   assert.equal(inferProvider("kimi-code/k3"), "kimi");
@@ -236,6 +238,21 @@ test("codexModelSelection maps effort and fast suffixes", () => {
   assert.deepEqual(codexModelSelection("gpt-5.6-sol-xhigh-fast", "low"), {
     model: "gpt-5.6-sol",
     effort: "xhigh",
+    serviceTier: "priority",
+  });
+  assert.deepEqual(codexModelSelection("gpt-6-astra", "medium"), {
+    model: "gpt-6-astra",
+    effort: "medium",
+    serviceTier: undefined,
+  });
+  assert.deepEqual(codexModelSelection("gpt-6-astra-ultra", "low"), {
+    model: "gpt-6-astra",
+    effort: "ultra",
+    serviceTier: undefined,
+  });
+  assert.deepEqual(codexModelSelection("gpt-6-astra-ultra-fast", "low"), {
+    model: "gpt-6-astra",
+    effort: "ultra",
     serviceTier: "priority",
   });
   assert.deepEqual(codexModelSelection("o3-mini", "high"), {
@@ -503,6 +520,7 @@ test("router aggregates model listings and captures per-provider failures", asyn
 test("claude backend lists current model ids and moving family aliases", async () => {
   const models = await new ClaudeBackend().listModels();
   assert.deepEqual(models.map((model) => model.id), [
+    "claude-fable-5-1",
     "claude-fable-5",
     "claude-opus-5",
     "claude-sonnet-5",
@@ -513,6 +531,7 @@ test("claude backend lists current model ids and moving family aliases", async (
     "haiku",
   ]);
   assert.ok(models.every((model) => model.efforts.includes("xhigh")));
+  assert.match(models.find((model) => model.id === "claude-fable-5-1").description, /Most capable/);
   assert.match(models.find((model) => model.id === "claude-opus-5").description, /agentic coding/);
   assert.match(models.find((model) => model.id === "opus").note, /Moving family alias/);
 });
@@ -604,6 +623,14 @@ test("claude backend maps sandbox levels to permission flags", async () => {
     });
     args = await stubArgs();
     assert.equal(args[args.indexOf("--effort") + 1], "low");
+
+    await backend.runAgent({
+      prompt: "look",
+      options: options(cwd, { model: "claude-fable-5-1", effort: "ultra" }),
+    });
+    args = await stubArgs();
+    assert.equal(args[args.indexOf("--model") + 1], "claude-fable-5-1");
+    assert.equal(args[args.indexOf("--effort") + 1], "max");
   });
 });
 

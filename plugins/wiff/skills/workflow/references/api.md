@@ -121,7 +121,9 @@ Options:
   `timeoutMs` do not invalidate a completed result.
 - `label`: human-readable activity label.
 - `model`: model id. Defaults to `gpt-5.6-sol` (override with `WIFF_DEFAULT_MODEL`). The model prefix picks the backend: `gpt-*`/`o*`/`codex*` run on Codex, `claude-*`/`opus`/`sonnet`/`haiku`/`fable` run on Claude Code, `composer-*`/`cursor-*`/`grok-*` run on Cursor, and `kimi-code/*` runs on Kimi. Cursor Grok ids are `grok-4.6` (and `cursor-grok-4.6` / `cursor-grok-4.6-xhigh-fast` slugs, which Wiff normalizes to the catalog id). Codex Fast mode uses the same suffix: `gpt-5.6-sol-fast` or `gpt-5.6-sol-xhigh-fast`.
-  Current explicit Claude ids include `claude-fable-5`, `claude-opus-5`,
+  Current Codex ids include `gpt-6-astra` (the most capable, supports the `ultra` effort tier;
+  needs Codex CLI >= 0.153.4), `gpt-5.6-sol`, `gpt-5.6-terra`, and `gpt-5.6-luna`.
+  Current explicit Claude ids include `claude-fable-5-1`, `claude-fable-5`, `claude-opus-5`,
   `claude-sonnet-5`, and `claude-haiku-4-5`; the short family names remain moving aliases for
   the latest model available through the installed Claude CLI.
 - `fallbackModels`: ordered model ids attempted after the primary model fails. Fallback model
@@ -130,7 +132,9 @@ Options:
 - `provider`: explicit backend (`codex`, `claude`, `cursor`, or `kimi`), overriding model-prefix inference.
 - `effort`: reasoning effort. Defaults to `medium`. Prefer `low` for mechanical inventory,
   `medium` for ordinary implementation, and reserve `high`/`xhigh` for the few review or
-  synthesis turns that need it.
+  synthesis turns that need it. `max` works on Codex and Claude; `ultra` (maximum reasoning
+  with automatic task delegation) is a Codex tier for `gpt-6-astra` and the `gpt-5.6-sol`/`gpt-5.6-terra`
+  models, and Wiff maps it to `max` when an agent falls back to a Claude model.
 - `sandbox`: `read-only`, `workspace-write`, or `danger-full-access`. Defaults to `read-only`.
 - `schema`: JSON Schema for the final response.
 - `cwd`: absolute child working directory. Defaults to the run directory.
@@ -187,12 +191,13 @@ Agents run on a pluggable backend selected per call: explicit `provider` option,
   Wiff disables Codex plugins/apps, enumerates the remaining configured MCP servers, and disables
   each one for the child app-server only. This avoids recursive/duplicated MCP process trees
   without changing interactive Codex configuration. `sandbox` is OS-enforced; `schema` uses
-  native structured output. Requires Codex CLI >= 0.144.6. A `-fast` model suffix
-  (`gpt-5.6-sol-fast`, `gpt-5.6-sol-xhigh-fast`) requests Codex Fast mode by sending
-  `serviceTier: "priority"` on `turn/start`.
+  native structured output. Requires Codex CLI >= 0.144.6 (>= 0.153.4 for `gpt-6-astra`).
+  A `-fast` model suffix (`gpt-5.6-sol-fast`, `gpt-5.6-sol-xhigh-fast`, `gpt-6-astra-ultra-fast`)
+  requests Codex Fast mode by sending `serviceTier: "priority"` on `turn/start`.
 - **claude** — one headless `claude -p` process per agent (`--no-session-persistence`, user
   settings/hooks/MCP servers disabled). `schema` maps to native `--json-schema`; personas map
-  to `--append-system-prompt`; `effort` maps directly (Claude additionally accepts `max`).
+  to `--append-system-prompt`; `effort` maps directly (Claude additionally accepts `max`;
+  Codex `minimal` becomes `low` and `ultra` becomes `max`).
   There is no OS sandbox, so sandbox levels map to permission policy: `read-only` exposes only
   the Read/Glob/Grep tools; `workspace-write` **requires `isolation: "worktree"`** (the
   worktree is the write-isolation mechanism) and enables auto-accepted edits plus Bash;
