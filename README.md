@@ -155,7 +155,7 @@ The Codex *plugin* is just packaging. The engine underneath is a plain stdio MCP
 MCP-speaking harness can orchestrate wiff workflows. The mental model: **both the orchestrator
 and the workers are pluggable** — whoever drives, each `agent()` child runs on a backend chosen
 from its model name: `gpt-*`/`o*` models run as native Codex threads via a local
-`codex app-server`; current `claude-fable-5`, `claude-opus-5`, `claude-sonnet-5`, and
+`codex app-server` (`gpt-6-astra` needs Codex CLI >= 0.153.4); current `claude-fable-5-1`, `claude-fable-5`, `claude-opus-5`, `claude-sonnet-5`, and
 `claude-haiku-4-5` models—or the moving `fable`/`opus`/`sonnet`/`haiku` aliases—run as headless `claude`
 agents, `composer-*` and `grok-*` models (including `cursor-grok-*` slugs) run through the official Cursor SDK (`@cursor/sdk`) in-process, and
 `kimi-code/*` models run as headless `kimi` processes. A workflow can mix them freely

@@ -53,8 +53,8 @@ set `WIFF_DAEMON_OWNERSHIP_PORT` if the reported secret-derived port is already 
 Goal stages are marked directly in the workflow graph as queued, active, met, failed, or replayed.
 
 Requires Node >= 22, git for `isolation: "worktree"`, and the runtime of whichever backend
-your agents use: Codex CLI >= 0.144.6 for `gpt-*`/`o*` models (the default; add a `-fast` suffix such as `gpt-5.6-sol-fast` for Codex Fast mode), the `claude` CLI for
-current `claude-fable-5`/`claude-opus-5`/`claude-sonnet-5`/`claude-haiku-4-5` models and the
+your agents use: Codex CLI >= 0.144.6 for `gpt-*`/`o*` models (the default; add a `-fast` suffix such as `gpt-5.6-sol-fast` for Codex Fast mode; `gpt-6-astra` and its `ultra` effort tier need Codex CLI >= 0.153.4), the `claude` CLI for
+current `claude-fable-5-1`/`claude-fable-5`/`claude-opus-5`/`claude-sonnet-5`/`claude-haiku-4-5` models and the
 moving `fable`/`opus`/`sonnet`/`haiku` aliases, or `CURSOR_API_KEY` plus the bundled
 `@cursor/sdk` for `composer-*` and `grok-*` models, or the `kimi` CLI for `kimi-code/*` models. Set
 `WIFF_BACKEND` to route unrecognized models to a specific backend, and `WIFF_DEFAULT_MODEL`

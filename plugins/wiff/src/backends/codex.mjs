@@ -31,8 +31,9 @@ export function parseGoalDirective(prompt) {
   return objective;
 }
 
-// Catalog ids look like gpt-5.6-sol. Wiff also accepts effort/fast suffixes
-// such as gpt-5.6-sol-xhigh-fast. Fast mode is Codex's priority service tier.
+// Catalog ids look like gpt-5.6-sol or gpt-6-astra. Wiff also accepts effort/fast
+// suffixes such as gpt-5.6-sol-xhigh-fast or gpt-6-astra-ultra ("ultra" is the
+// GPT-6 Astra tier). Fast mode is Codex's priority service tier.
 const CODEX_MODEL =
   /^(.+?)(?:-(low|medium|high|xhigh|max|ultra))?(?:-(fast))?$/i;
 const CODEX_FAST_SERVICE_TIER = "priority";
